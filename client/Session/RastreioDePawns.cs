@@ -188,7 +188,7 @@ public static class RastreioDePawns
         }
 
         Log.Message(
-            "[WithFriends] rastreio de estado dos pawns — mesmos ticks da digital\n" +
+            $"[WithFriends] rastreio de estado dos pawns — geração {VisitaEmAndamento.UltimaRessincronizacao}, mesmos ticks da digital\n" +
             "  (compare com o do outro jogador; a primeira linha diferente diz qual pawn e qual campo)");
 
         foreach (var tick in ordem.OrderBy(t => t))

@@ -548,7 +548,9 @@ public sealed class SessaoCliente
         // ~100 passos do ponto de junção, então 200 para cada lado cobrem o que
         // interessa. O anel largo continua valendo para o aborto, que acontece
         // uma vez e onde não há mais nada a proteger.
-        RngDeSessao.Despejar($"ressincronização #{pedido.Numero}, passo {pedido.TickAlvo}");
+        RngDeSessao.Despejar(
+            $"geração {VisitaEmAndamento.UltimaRessincronizacao}, " +
+            $"ressincronização #{pedido.Numero}, passo {pedido.TickAlvo}");
         RastreioDeRng.Despejar(pedido.TickAlvo, ticksAntes: 200, ticksDepois: 200);
         RastreioDePawns.Despejar();
 
@@ -1054,7 +1056,16 @@ public sealed class SessaoCliente
         // momentos diferentes. Isso é desync de relógio, não de simulação, e
         // procurar sorteio nesse caso é procurar no lugar errado.
         Log.Message(
-            $"[WithFriends/digital] passo {tickDeSessao}: tick de jogo " +
+            // **A geração faz parte da identidade do passo.**
+            //
+            // Depois de um ponto de junção o contador de passos é rebobinado, e
+            // o mesmo número de passo volta a acontecer — com outro estado. Sem
+            // a geração no rótulo, comparar os dois diários junta medições de
+            // momentos diferentes e produz diferenças que não existem. Eu já
+            // caí nisso duas vezes: uma "diferença de 98 ticks de jogo" e uma
+            // "diferença de 58 sorteios" que eram só gerações trocadas.
+            $"[WithFriends/digital] g{VisitaEmAndamento.UltimaRessincronizacao} " +
+            $"passo {tickDeSessao}: tick de jogo " +
             $"{Find.TickManager.TicksGame}, {passosSimulados} simulados, " +
             $"{passosSemSimular} só com comando, " +
             $"{ContadorDeSorteios.ForaDoTick} sorteio(s) fora do tick");

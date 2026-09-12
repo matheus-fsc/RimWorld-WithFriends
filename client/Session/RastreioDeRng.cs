@@ -308,7 +308,8 @@ public static class RastreioDeRng
         var texto = new StringBuilder();
 
         texto.AppendLine(
-            $"[WithFriends] rastreio de RNG por local de chamada — ticks {inicio} a {fim}\n" +
+            $"[WithFriends] rastreio de RNG por local de chamada — " +
+            $"geração {VisitaEmAndamento.UltimaRessincronizacao}, ticks {inicio} a {fim}\n" +
             $"  (compare este bloco com o do outro jogador; a linha com contagem diferente é a causa)\n" +
             $"  janela: o anel inteiro — a divergência costuma nascer bem antes de ser detectada\n" +
             $"  custo do diagnóstico: {Custo}");
