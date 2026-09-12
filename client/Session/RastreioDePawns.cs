@@ -137,7 +137,21 @@ public static class RastreioDePawns
             $"dest {(pather?.Destination.IsValid == true ? $"{pather.Destination.Cell.x},{pather.Destination.Cell.z}" : "-"),-9} " +
             $"job {job?.def?.defName ?? "-",-22} " +
             $"fila {pawn.jobs?.jobQueue?.Count ?? 0}  " +
-            $"draft {(pawn.drafter?.Drafted == true ? 1 : 0)}";
+            $"draft {(pawn.drafter?.Drafted == true ? 1 : 0)}  " +
+            // Sangramento e ritmo de atualização: os dois entram na decisão de
+            // largar sangue, que já é a segunda divergência que cai aqui.
+            //
+            //   if (Rand.Chance(bleedRate * bodySize * fator * delta))
+            //       DropBloodFilth();
+            //
+            // O sorteio acontece dos dois lados; o que muda o resultado é o
+            // LIMIAR. Sem estes números no rastreio, "um largou sangue e o outro
+            // não" não distingue taxa diferente de delta diferente — e são
+            // causas em lugares opostos.
+            $"sangue {pawn.health?.hediffSet?.BleedRateTotal ?? 0f,7:F4} " +
+            $"hediffs {pawn.health?.hediffSet?.hediffs?.Count ?? 0,3}  " +
+            $"ritmo {pawn.UpdateRateTicks,3} " +
+            $"corpo {pawn.BodySize,5:F2}";
     }
 
     public static void Despejar()
