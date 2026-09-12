@@ -92,6 +92,29 @@ public static class RastreioDePawns
         while (ordem.Count > AmostrasGuardadas) porTick.Remove(ordem.Dequeue());
     }
 
+    static readonly System.Reflection.FieldInfo? DeltaDoTick =
+        HarmonyLib.AccessTools.Field(typeof(Thing), "tickDelta");
+
+    /// <summary>
+    /// Quantos ticks se acumularam desde a última vez que esta coisa foi
+    /// tickada.
+    ///
+    /// <para>É o <c>delta</c> que chega em <c>TickInterval(delta)</c>, e ele
+    /// multiplica probabilidades: <c>Rand.Chance(taxa * delta)</c>. Dois lados
+    /// com o mesmo estado e o mesmo sorteio ainda decidem diferente se o delta
+    /// diferir.</para>
+    ///
+    /// <para>Não é o mesmo que <c>UpdateRateTicks</c>, que já está na linha:
+    /// aquele é o ritmo <b>pretendido</b>, este é o que de fato se acumulou.
+    /// Foram necessários os dois porque o ritmo batia nos dois lados e a
+    /// decisão, mesmo assim, não.</para>
+    /// </summary>
+    static int Delta(Thing coisa)
+    {
+        try { return DeltaDoTick?.GetValue(coisa) is int d ? d : -1; }
+        catch (Exception) { return -1; }
+    }
+
     static readonly System.Reflection.FieldInfo? TicksAteImpacto =
         HarmonyLib.AccessTools.Field(typeof(Projectile), "ticksToImpact");
 
@@ -151,6 +174,8 @@ public static class RastreioDePawns
             $"sangue {pawn.health?.hediffSet?.BleedRateTotal ?? 0f,7:F4} " +
             $"hediffs {pawn.health?.hediffSet?.hediffs?.Count ?? 0,3}  " +
             $"ritmo {pawn.UpdateRateTicks,3} " +
+            $"delta {Delta(pawn),3} " +
+            $"postura {(int)RimWorld.PawnUtility.GetPosture(pawn)} " +
             $"corpo {pawn.BodySize,5:F2}";
     }
 
