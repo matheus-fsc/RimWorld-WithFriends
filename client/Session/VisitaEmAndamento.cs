@@ -72,18 +72,36 @@ public static class VisitaEmAndamento
         JogoDeOrigem = Current.Game;
         Inicio = inicio;
 
-        // **O ponto de retorno nunca é apagado por uma travessia nova.**
+        // **O ponto de retorno é escrito UMA vez, no começo da visita.**
         //
-        // Esta função passou a ser chamada duas vezes: no bootstrap e de novo a
-        // cada ponto de junção refeito (ressincronização). Na segunda vez, quem
-        // chama está **dentro** da partida do anfitrião, e o congelador de lá
-        // não conhece hash nenhum — passaria `null`.
+        // Esta função é chamada no bootstrap e de novo a cada ponto de junção
+        // refeito. Na segunda vez quem chama está **dentro da partida do
+        // anfitrião** — e o componente de sessão de lá veio no save do
+        // anfitrião, com o congelador dele dentro. O que se passaria como
+        // "ponto de retorno" seria o do **outro jogador**.
         //
-        // Apagar aqui seria apagar o caminho de volta para a colônia do
-        // visitante. Perder o encontro é aceitável; perder a colônia não é
-        // (§2.3), e a ressincronização existe justamente para não perder nem
-        // um nem outro.
-        if (hashPreSessao != null) HashPreSessao = hashPreSessao;
+        // Foi o que aconteceu: o visitante congelou a colônia dele em
+        // `67883a5b`, ressincronizou, e o ponto de retorno virou `1691ecfc` —
+        // o do anfitrião, que não existe nesta máquina. No fim da visita:
+        //
+        //     não foi possível voltar ao ponto de retorno:
+        //     Checkpoint sha256:1691ecfc… não está nesta máquina
+        //
+        // A guarda anterior só recusava `null`, e o valor errado não é nulo: é
+        // o hash certo de outra pessoa. Aqui o primeiro a escrever ganha, e
+        // ninguém mais encosta — perder o encontro é aceitável, perder a colônia
+        // não é (§2.3).
+        if (HashPreSessao == null)
+        {
+            HashPreSessao = hashPreSessao;
+        }
+        else if (hashPreSessao != null && hashPreSessao != HashPreSessao)
+        {
+            Log.Warning(
+                $"[WithFriends] ignorando ponto de retorno {hashPreSessao} — " +
+                $"esta visita já tem o dela ({HashPreSessao}). " +
+                "Provavelmente é o do outro jogador, herdado com a partida dele.");
+        }
 
         SaveDaVisita = saveDaVisita;
         SouVisitante = souVisitante;
