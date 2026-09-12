@@ -946,6 +946,7 @@ public sealed class SessaoCliente
         TempoRealDoTick.AntesDoTick(Find.TickManager?.TicksGame ?? 0);
         NaInterface.Tickando = true;
         RastreioDeRng.AbrirTick(TickDeSessao);
+        RastreioDePawns.ComecarTick();
 
         try
         {

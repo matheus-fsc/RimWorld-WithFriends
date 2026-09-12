@@ -115,6 +115,48 @@ public static class RastreioDePawns
     /// ordem em que os pawns são tickados, que muda qual deles consome qual
     /// sorteio.</para>
     /// </summary>
+    /// <summary>
+    /// Em que <b>posição</b> cada pawn foi tickado neste tick.
+    ///
+    /// <para><b>A última hipótese de pé.</b> Seis divergências no mesmo
+    /// <c>DropBloodFilth</c>, e a fórmula inteira já foi eliminada: taxa de
+    /// sangramento bit a bit, corpo, postura, hediffs, ritmo, fase do ciclo e
+    /// agora o <c>delta</c> — todos idênticos nos dois lados, com a mesma
+    /// posição no gerador no tick anterior.</para>
+    ///
+    /// <para>Entradas iguais e sorteio no mesmo lugar só podem dar resultados
+    /// diferentes se o sorteio <b>não for o mesmo</b>. E isso acontece se a
+    /// <b>ordem</b> em que os pawns são tickados mudar: o pawn X consome o
+    /// enésimo número de um lado e o enésimo-primeiro do outro. O total de
+    /// sorteios do tick continua batendo — e batia — enquanto o resultado de um
+    /// deles vira.</para>
+    ///
+    /// <para>A ordem vem de <c>TickList</c>, que é ordem de registro, que é
+    /// ordem de spawn. Depois de um carregamento é a ordem do save; durante o
+    /// jogo, a ordem em que as coisas nasceram.</para>
+    /// </summary>
+    static readonly Dictionary<int, int> posicaoNoTick = new();
+
+    static int proximaPosicao;
+
+    /// <summary>Chamado no começo de cada passo, antes de tickar.</summary>
+    public static void ComecarTick()
+    {
+        if (!Ligado) return;
+        posicaoNoTick.Clear();
+        proximaPosicao = 0;
+    }
+
+    public static void AnotarOrdem(Pawn pawn)
+    {
+        if (!Ligado) return;
+        if (!posicaoNoTick.ContainsKey(pawn.thingIDNumber))
+            posicaoNoTick[pawn.thingIDNumber] = proximaPosicao++;
+    }
+
+    static int Ordem(Pawn pawn) =>
+        posicaoNoTick.TryGetValue(pawn.thingIDNumber, out var i) ? i : -1;
+
     static readonly Dictionary<int, int> deltaDaSaude = new();
 
     public static void AnotarDeltaDaSaude(Pawn pawn, int delta) =>
@@ -238,7 +280,7 @@ public static class RastreioDePawns
             $"sangue {(pawn.health?.hediffSet?.BleedRateTotal ?? 0f).ToString("R"),-12} " +
             $"hediffs {pawn.health?.hediffSet?.hediffs?.Count ?? 0,3}  " +
             $"ritmo {pawn.UpdateRateTicks,3} " +
-            $"delta {Delta(pawn),3} saude {DeltaDaSaude(pawn),3} " +
+            $"delta {Delta(pawn),3} saude {DeltaDaSaude(pawn),3} ordem {Ordem(pawn),3} " +
             $"postura {(int)RimWorld.PawnUtility.GetPosture(pawn)} " +
             $"corpo {pawn.BodySize.ToString("R")}";
     }
@@ -285,6 +327,9 @@ public static class DeltaDaSaudeAnotado
     {
         if (!RastreioDePawns.Ligado) return;
         if (CampoDoPawn?.GetValue(__instance) is Pawn pawn)
+        {
             RastreioDePawns.AnotarDeltaDaSaude(pawn, delta);
+            RastreioDePawns.AnotarOrdem(pawn);
+        }
     }
 }
