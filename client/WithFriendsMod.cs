@@ -40,6 +40,10 @@ public class WithFriendsMod : Mod
         // ficam guardadas e caem no arquivo assim que ele abre.
         Session.DiarioDaInstancia.Abrir(Settings.PlayerIdOuNovo());
 
+        // Instância de árbitro: simula e não desenha. Sem efeito nenhum quando
+        // `-arbitro` não foi passado.
+        Session.ModoArbitro.Preparar();
+
         // Efeitos visuais e sonoros não podem mover o estado compartilhado.
         // São dezenas de métodos, então o remendo é em lote (ADR 0012).
         Session.EfeitosNaoDeterministicos.Instalar(Harmony);
