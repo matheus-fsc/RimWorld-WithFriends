@@ -511,48 +511,39 @@ public sealed class SessaoCliente
 
         Messages.Message(
             $"A visita divergiu e está voltando ao último ponto em que os dois batiam " +
-            $"(tick {pedido.TickAlvo}). O encontro continua.",
+            $"(passo {pedido.TickAlvo}). O encontro continua.",
             MessageTypeDefOf.NeutralEvent, historical: true);
+
+        Atual = Atual.APartirDoTick(pedido.TickAlvo);
 
         // O visitante não faz nada aqui: ele espera a partida chegar, e
         // `PartidaRecebida` cuida do resto — a mesma porta do bootstrap.
         if (VisitaEmAndamento.SouVisitante) return;
 
-        // **O ponto novo é o tick de jogo do instantâneo, não o passo antigo.**
+        // **Passo de sessão e tick de jogo são dois números diferentes** (ADR
+        // 0017), e trocar um pelo outro aqui já custou uma sessão inteira.
         //
-        // A primeira versão recomeçava em `pedido.TickAlvo` — o último passo de
-        // sessão em que as digitais bateram. Mas o que atravessa é um **save**,
-        // e um save está no tick de jogo em que foi tirado, não num passo de
-        // sessão de antes. Os dois lados carregavam o mesmo save e cada um
-        // remontava o par passo↔tick a partir do próprio relógio: medido, 98
-        // ticks de jogo de diferença no mesmo passo.
+        // `pedido.TickAlvo` é **passo de sessão** — é o que o coordenador conta,
+        // é contra ele que a barreira libera, e é ele que `Retomar` põe em
+        // `TickDeSessao`. O tick de jogo vem junto no save, igual para os dois,
+        // e não precisa de ninguém para combiná-lo.
         //
-        // O efeito era pior que não ressincronizar: as digitais nunca mais
-        // batiam, `UltimoTickValido` ficava preso no mesmo número, e as três
-        // ressincronizações da sessão eram gastas sem nenhuma chance de
-        // convergir.
-        //
-        // Ler o tick aqui é seguro porque `Ressincronizando` já parou o laço de
-        // tick: o jogo não anda entre esta linha e a serialização.
-        long tickDoInstantaneo = Find.TickManager.TicksGame;
-        Atual = Atual.APartirDoTick(tickDoInstantaneo);
-
+        // Uma versão anterior recomeçava do tick de jogo do instantâneo. O lado
+        // que recarregava passava a contar passos a partir de 66055 enquanto o
+        // coordenador liberava 20, 266, 932 — e ficava parado para sempre, com o
+        // outro jogando normalmente. O sintoma era "uma instância em play e a
+        // outra parada", e a causa era esta troca.
         Log.Message(
-            $"[WithFriends] ponto de junção novo no tick de jogo {tickDoInstantaneo} " +
-            $"(a divergência foi vista no passo {pedido.TickAlvo})");
+            $"[WithFriends] ponto de junção novo no passo {pedido.TickAlvo} " +
+            $"(tick de jogo {Find.TickManager.TicksGame})");
 
         BootstrapDaPartida.Enviar(
-            Atual.SessaoId, tickDoInstantaneo, Atual, congelador.HashPreSessao);
+            Atual.SessaoId, pedido.TickAlvo, Atual, congelador.HashPreSessao);
     }
 
     public void PartidaRecebida(SessaoPartida mensagem)
     {
         if (Atual == null || mensagem.SessaoId != Atual.SessaoId) return;
-
-        // O tick de partida vem do **instantâneo**, sempre. No bootstrap isso
-        // não muda nada (os dois números coincidem); num ponto de junção refeito
-        // é o que mantém os dois lados no mesmo tick de jogo depois de carregar.
-        Atual = Atual.APartirDoTick(mensagem.Tick);
 
         BootstrapDaPartida.Receber(mensagem, Atual, congelador.HashPreSessao);
     }

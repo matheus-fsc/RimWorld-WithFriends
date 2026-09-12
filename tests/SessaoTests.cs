@@ -679,6 +679,43 @@ public class SessaoTests
             "fp:0|passo:100-108|mapa0:aaaaaaaa")!);
     }
 
+    [Fact]
+    public void O_ponto_de_juncao_novo_e_um_passo_de_sessao()
+    {
+        // Passo de sessão e tick de jogo são dois números diferentes (ADR 0017),
+        // e trocar um pelo outro custou uma sessão: o lado que recarregava
+        // passava a contar passos a partir do tick de jogo (66055) enquanto o
+        // coordenador liberava 20, 266, 932 — parado para sempre, com o outro
+        // jogando normalmente.
+        //
+        // O alvo tem de continuar na escala do que o coordenador conta.
+        var inicio = AbrirSessao();
+        var t = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        broker.Barreira(Anfitriao, Digital(inicio.SessaoId, 100, "igual"), t);
+        broker.Barreira(Visitante, Digital(inicio.SessaoId, 100, "igual"), t);
+
+        IMessage? resposta = null;
+        for (int i = 1; i <= BrokerDeSessoes.DivergenciasParaAbortar; i++)
+        {
+            long tick = 100 + i * 8;
+            broker.Barreira(Anfitriao, Digital(inicio.SessaoId, tick, $"a{i}"), t);
+            resposta = broker.Barreira(Visitante, Digital(inicio.SessaoId, tick, $"b{i}"), t);
+        }
+
+        var pedido = Assert.IsType<SessaoRessincronizar>(resposta);
+        Assert.Equal(100, pedido.TickAlvo);
+
+        // E a barreira volta a liberar a partir dele — não de um número de outra
+        // escala, que o cliente nunca alcançaria.
+        broker.Barreira(Anfitriao,
+            new SessaoBarreira { SessaoId = inicio.SessaoId, Tick = pedido.TickAlvo }, t);
+        var voltou = (SessaoBarreira)broker.Barreira(Visitante,
+            new SessaoBarreira { SessaoId = inicio.SessaoId, Tick = pedido.TickAlvo }, t)!;
+
+        Assert.InRange(voltou.TickLiberado, pedido.TickAlvo, pedido.TickAlvo + Sessao.FolgaDaBarreira);
+    }
+
     static SessaoBarreira Digital(string sessaoId, long tick, string digital) => new()
     {
         SessaoId = sessaoId,
