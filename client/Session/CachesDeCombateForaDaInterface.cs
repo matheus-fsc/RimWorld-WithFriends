@@ -109,18 +109,37 @@ public static class CachesDeCombateForaDaInterface
 
     static readonly Dictionary<Type, MethodInfo?> IndexadorPorTipo = new();
 
-    /// <summary>O elemento de cache daquela capacidade, ou <c>null</c>.</summary>
+    /// <summary>
+    /// O elemento de cache daquela capacidade, ou <c>null</c>.
+    ///
+    /// <para><c>DefMap&lt;D,V&gt;</c> tem <b>dois</b> indexadores — <c>this[D
+    /// def]</c> e <c>this[int index]</c> —, então pedir <c>get_Item</c> pelo nome
+    /// dá <c>AmbiguousMatchException</c>. Sem o tipo do parâmetro, o guarda
+    /// estourava a cada desenho do painel de inspeção; o erro subia por
+    /// <c>CanBeAwake</c> e enchia a tela.</para>
+    ///
+    /// <para>Todo o corpo vai num <c>try</c>: este guarda é conveniência de
+    /// determinismo, e nada aqui vale derrubar o painel de um jogador
+    /// (§14.5).</para>
+    /// </summary>
     static object? Elemento(PawnCapacitiesHandler tratador, PawnCapacityDef capacidade)
     {
-        object? mapa = NiveisCacheados?.GetValue(tratador);
-        if (mapa == null) return null;
+        try
+        {
+            object? mapa = NiveisCacheados?.GetValue(tratador);
+            if (mapa == null) return null;
 
-        var tipo = mapa.GetType();
-        if (!IndexadorPorTipo.TryGetValue(tipo, out var indexador))
-            IndexadorPorTipo[tipo] = indexador = AccessTools.Method(tipo, "get_Item");
+            var tipo = mapa.GetType();
+            if (!IndexadorPorTipo.TryGetValue(tipo, out var indexador))
+                IndexadorPorTipo[tipo] = indexador =
+                    AccessTools.Method(tipo, "get_Item", new[] { typeof(PawnCapacityDef) });
 
-        try { return indexador?.Invoke(mapa, new object[] { capacidade }); }
-        catch (Exception) { return null; }
+            return indexador?.Invoke(mapa, new object[] { capacidade });
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     /// <summary>
