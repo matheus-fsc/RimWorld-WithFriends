@@ -171,12 +171,26 @@ public static class RastreioDePawns
             // LIMIAR. Sem estes números no rastreio, "um largou sangue e o outro
             // não" não distingue taxa diferente de delta diferente — e são
             // causas em lugares opostos.
-            $"sangue {pawn.health?.hediffSet?.BleedRateTotal ?? 0f,7:F4} " +
+            // **Precisão total, não quatro casas.**
+            //
+            // Quatro casas diziam "idêntico" em nove pawns sangrando enquanto a
+            // decisão de largar sangue saía diferente. `Rand.Chance(p)` compara
+            // `Rand.Value < p`: basta o limiar diferir no sétimo decimal e o
+            // sorteio cair naquela fresta.
+            //
+            // E há um jeito conhecido de isso acontecer: `BleedRateTotal` é uma
+            // **soma sobre a lista de hediffs**, e soma de float não é
+            // associativa. Ordem de coleção diferente dá somas que só divergem
+            // nos últimos bits — uma das seis famílias que nomeamos no começo, e
+            // a única que quatro casas escondem.
+            //
+            // "R" é ida e volta: o texto reconstrói o mesmo float.
+            $"sangue {(pawn.health?.hediffSet?.BleedRateTotal ?? 0f).ToString("R"),-12} " +
             $"hediffs {pawn.health?.hediffSet?.hediffs?.Count ?? 0,3}  " +
             $"ritmo {pawn.UpdateRateTicks,3} " +
             $"delta {Delta(pawn),3} " +
             $"postura {(int)RimWorld.PawnUtility.GetPosture(pawn)} " +
-            $"corpo {pawn.BodySize,5:F2}";
+            $"corpo {pawn.BodySize.ToString("R")}";
     }
 
     public static void Despejar()
