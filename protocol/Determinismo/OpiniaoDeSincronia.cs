@@ -104,16 +104,78 @@ public sealed class OpiniaoDeSincronia
     public string Resumo()
     {
         var texto = new StringBuilder();
-        texto.Append((short)ModoDeArredondamento).Append('|');
-        texto.Append(TickInicial).Append('-').Append(TickFinal).Append('|');
+        texto.Append("fp:").Append((short)ModoDeArredondamento).Append('|');
+        texto.Append("passo:").Append(TickInicial).Append('-').Append(TickFinal).Append('|');
 
         foreach (int mapaId in EstadosPorMapa.Keys.OrderBy(id => id))
-            texto.Append(mapaId).Append(':').Append(Combinar(EstadosPorMapa[mapaId])).Append('|');
+            texto.Append("mapa").Append(mapaId).Append(':')
+                 .Append(Combinar(EstadosPorMapa[mapaId]).ToString("x8")).Append('|');
 
-        texto.Append("mundo:").Append(Combinar(EstadosDoMundo)).Append('|');
-        texto.Append("cmd:").Append(Combinar(EstadosDeComandos));
+        texto.Append("mundo:").Append(Combinar(EstadosDoMundo).ToString("x8")).Append('|');
+        texto.Append("cmd:").Append(Combinar(EstadosDeComandos).ToString("x8"));
 
-        return Hashing.OfString(texto.ToString());
+        return texto.ToString();
+    }
+
+    /// <summary>
+    /// O que difere entre dois resumos — <c>null</c> se batem.
+    ///
+    /// <para><b>Por que o resumo deixou de ser um sha256.</b> Ele era: todas as
+    /// partes entravam num hash só, e o que chegava do outro lado era "diferente".
+    /// Divergiu — mas no mundo, no mapa, nos comandos, ou no modo de
+    /// arredondamento? Cada uma dessas aponta para um lugar diferente, e sem
+    /// saber qual era eu gastava uma rodada comparando rastreio de pawn à
+    /// mão.</para>
+    ///
+    /// <para>Colapsar também não economizava nada: o composto tem umas 60 letras,
+    /// e o sha256 tem 64.</para>
+    ///
+    /// <para>É a mesma ideia do <c>CheckForDesync</c> do Multiplayer, que
+    /// devolve <i>"Wrong random state on map 0"</i> ou <i>"Random state from
+    /// commands doesn't match"</i> em vez de um booleano — a diferença é que lá
+    /// a comparação acontece com as duas opiniões inteiras em mãos, e aqui com
+    /// os dois resumos que já viajam em toda barreira.</para>
+    /// </summary>
+    public static string? DiferencaEntreResumos(string meu, string doOutro)
+    {
+        if (meu == doOutro) return null;
+        if (meu.Length == 0 || doOutro.Length == 0) return null;
+
+        var minhas = Partes(meu);
+        var dele = Partes(doOutro);
+
+        var diferentes = new List<string>();
+
+        foreach (var par in minhas)
+        {
+            if (!dele.TryGetValue(par.Key, out string? outro))
+                diferentes.Add($"{par.Key} só existe de um lado");
+            else if (outro != par.Value)
+                diferentes.Add($"{par.Key}: {par.Value} != {outro}");
+        }
+
+        foreach (var par in dele)
+            if (!minhas.ContainsKey(par.Key))
+                diferentes.Add($"{par.Key} só existe do outro lado");
+
+        return diferentes.Count == 0
+            ? "os resumos diferem mas nenhuma parte foi reconhecida (versões diferentes do mod?)"
+            : string.Join("; ", diferentes);
+    }
+
+    static Dictionary<string, string> Partes(string resumo)
+    {
+        var partes = new Dictionary<string, string>();
+        foreach (string pedaco in resumo.Split('|'))
+        {
+            int corte = pedaco.IndexOf(':');
+            // `Substring`, não range: o protocolo compila para o netstandard do
+            // jogo, onde `System.Index`/`System.Range` não existem.
+            if (corte > 0)
+                partes[pedaco.Substring(0, corte)] = pedaco.Substring(corte + 1);
+        }
+
+        return partes;
     }
 
     /// <summary>Índice do primeiro elemento diferente, ou -1 se são iguais.</summary>

@@ -30,10 +30,19 @@ var relogio = System.Diagnostics.Stopwatch.StartNew();
 var leitura = new ReaderParameters { ReadSymbols = false };
 using var assembly = AssemblyDefinition.ReadAssembly(dll, leitura);
 
-var achados = new List<(string metodo, FonteLocal fonte, string tocado, string balde, bool mp)>();
+var tipos = TodosOsTipos(assembly.MainModule).ToList();
+
+// Quem a simulação de uma visita alcança, pelo IL. A separação por nome ordena
+// a leitura; esta corta a lista.
+var alcance = new WithFriends.Auditor.Alcance(assembly.MainModule, tipos);
+Console.WriteLine(
+    $"alcance: {alcance.MetodosAlcancados} de {alcance.MetodosIndexados} método(s) " +
+    $"alcançáveis a partir do tick e das portas de comando");
+
+var achados = new List<(string metodo, FonteLocal fonte, string tocado, string balde, bool mp, bool alcanca)>();
 int metodos = 0;
 
-foreach (var tipo in TodosOsTipos(assembly.MainModule))
+foreach (var tipo in tipos)
 foreach (var metodo in tipo.Methods)
 {
     if (!metodo.HasBody) continue;
@@ -59,12 +68,14 @@ foreach (var metodo in tipo.Methods)
         var fonte = FontesLocais.Casar(tipoDeclarante, membro);
         if (fonte == null) continue;
 
+        string chave = $"{tipo.FullName}.{metodo.Name}";
         achados.Add((
-            $"{tipo.FullName}.{metodo.Name}",
+            chave,
             fonte,
             $"{Curto(tipoDeclarante)}.{membro}",
             FontesLocais.Balde(tipo.FullName, metodo.Name),
-            WithFriends.Auditor.Multiplayer.Remenda(alvosMp, $"{tipo.FullName}.{metodo.Name}")));
+            WithFriends.Auditor.Multiplayer.Remenda(alvosMp, chave),
+            alcance.Alcanca(chave)));
     }
 }
 
@@ -82,17 +93,35 @@ foreach (var grupo in achados.GroupBy(a => a.fonte)
         $"  {Marca(grupo.Key.Estado)} {grupo.Key.Tipo,-28} " +
         $"simulação {grupo.Count(a => a.balde == "simulacao"),5}   " +
         $"indefinido {grupo.Count(a => a.balde == "indefinido"),5}   " +
-        $"interface {grupo.Count(a => a.balde == "interface"),5}" +
+        $"interface {grupo.Count(a => a.balde == "interface"),5}   " +
+        $"NA VISITA {grupo.Count(a => a.alcanca),5}" +
         (fonteMp == null ? "" : $"   MP {grupo.Count(a => a.mp),4}"));
 }
+
+Console.WriteLine();
+var naVisita = achados.Where(a => a.alcanca).Select(a => a.metodo).Distinct().Count();
+Console.WriteLine(
+    $"fila real: {naVisita} método(s) distintos tocam fonte local **e** rodam numa visita " +
+    $"(de {achados.Select(a => a.metodo).Distinct().Count()} no jogo inteiro)");
 
 if (fonteMp != null)
 {
     var sim = achados.Where(a => a.balde == "simulacao").ToList();
-    Console.WriteLine();
     Console.WriteLine(
         $"cruzamento: {sim.Count(a => a.mp)} de {sim.Count} achados de simulação " +
         "também são remendados pelo Multiplayer");
+
+    // A lista dele é sete anos de bug real. Cortada pelo nosso escopo, ela
+    // deixa de ser "878 alvos, leia todos" e vira uma fila que acaba.
+    int mpNaVisita = alvosMp.Count(alvo => alcance.AlcancaCurto(alvo));
+    Console.WriteLine(
+        $"Multiplayer × visita: {mpNaVisita} dos {alvosMp.Count} alvos dele " +
+        "rodam dentro de uma visita nossa — é a fila herdada, já filtrada");
+
+    File.WriteAllLines(
+        Path.ChangeExtension(saida, ".fila-mp.txt"),
+        alvosMp.Where(alvo => alcance.AlcancaCurto(alvo)).OrderBy(x => x, StringComparer.Ordinal));
+    Console.WriteLine($"  → {Path.ChangeExtension(saida, ".fila-mp.txt")}");
 }
 
 return 0;
@@ -133,7 +162,10 @@ string Relatorio()
     texto.AppendLine();
     texto.AppendLine("A pergunta aqui não é \"o que divergiu\" — é \"o que PODE divergir\".");
     texto.AppendLine("Interface pode ler câmera e teclado; é o trabalho dela. Simulação não.");
-    texto.AppendLine("A separação abaixo é heurística por nome: serve para ordenar a leitura.");
+    texto.AppendLine("A separação por balde é heurística por nome: serve para ordenar a leitura.");
+    texto.AppendLine("[visita] não é heurística: é alcançabilidade no IL a partir do tick e das");
+    texto.AppendLine("portas de comando, errando sempre para mais. Sem a marca, o método não roda");
+    texto.AppendLine("numa visita — e é isso que autoriza tirá-lo da fila.");
     texto.AppendLine();
 
     foreach (var grupo in achados.GroupBy(a => a.fonte)
@@ -154,7 +186,8 @@ string Relatorio()
         foreach (var balde in new[] { "simulacao", "indefinido", "interface" })
         {
             var linhas = grupo.Where(a => a.balde == balde)
-                .Select(a => $"    {(a.mp ? "[MP]" : "    ")} {a.metodo}   →  {a.tocado}")
+                .Select(a => $"    {(a.alcanca ? "[visita]" : "        ")}" +
+                             $"{(a.mp ? "[MP]" : "    ")} {a.metodo}   →  {a.tocado}")
                 .Distinct().OrderBy(x => x, StringComparer.Ordinal).ToList();
 
             if (linhas.Count == 0) continue;

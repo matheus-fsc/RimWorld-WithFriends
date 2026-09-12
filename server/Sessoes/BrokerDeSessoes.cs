@@ -1,4 +1,5 @@
 using WithFriends.Protocol;
+using WithFriends.Protocol.Determinismo;
 using WithFriends.Protocol.Messages;
 using WithFriends.Server.Mundo;
 
@@ -309,7 +310,9 @@ public sealed class BrokerDeSessoes
                         {
                             Console.WriteLine(
                                 $"!! sessão {sessao.Id}: digitais diferentes no tick {relato.Tick} " +
-                                $"({sessao.DivergenciasSeguidas}/{DivergenciasParaAbortar}) — aguardando confirmação");
+                                $"({sessao.DivergenciasSeguidas}/{DivergenciasParaAbortar}) — " +
+                                OpiniaoDeSincronia.DiferencaEntreResumos(
+                                    relato.Fingerprint, doOutro));
 
                             return new SessaoBarreira
                             {
@@ -326,10 +329,20 @@ public sealed class BrokerDeSessoes
                             };
                         }
 
+                        // **Qual parte divergiu**, não só "divergiu".
+                        //
+                        // O resumo carrega as partes nomeadas — modo de
+                        // arredondamento, RNG por mapa, do mundo, dos comandos.
+                        // Cada uma aponta para um lugar diferente, e dizer qual
+                        // foi poupa a rodada de comparar rastreio à mão.
+                        string ondeDiferiu =
+                            OpiniaoDeSincronia.DiferencaEntreResumos(
+                                relato.Fingerprint, doOutro)
+                            ?? "(partes não reconhecidas)";
+
                         string relatorio =
                             $"Ticks suspeitos: {string.Join(", ", sessao.TicksSuspeitos)}. " +
-                            $"No tick {relato.Tick}, {autor} calculou {relato.Fingerprint} e " +
-                            $"{outro} calculou {doOutro}. " +
+                            $"No tick {relato.Tick} divergiu em — {ondeDiferiu}. " +
                             $"Último ponto consistente: {sessao.UltimoTickValido}.";
 
                         sessao.RelatoriosDeDivergencia.Add(relatorio);

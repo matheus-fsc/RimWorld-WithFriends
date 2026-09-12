@@ -1,4 +1,5 @@
 using WithFriends.Protocol;
+using WithFriends.Protocol.Determinismo;
 using WithFriends.Protocol.Messages;
 using WithFriends.Server.Mundo;
 using WithFriends.Server.Sessoes;
@@ -585,7 +586,7 @@ public class SessaoTests
 
         var pedido = Assert.IsType<SessaoRessincronizar>(resposta);
         Assert.Equal(1, pedido.Numero);
-        Assert.Contains("calculou", pedido.Explicacao);
+        Assert.Contains("divergiu em", pedido.Explicacao);
 
         // Enquanto o ponto novo não fica de pé, comando nenhum é carimbado — o
         // passo contra o qual carimbar ainda está viajando.
@@ -649,6 +650,33 @@ public class SessaoTests
         // divergência é uma pista, e jogá-las fora seria perder o que a visita
         // custou para produzir.
         Assert.Contains("Divergências desta sessão", aborto.Explicacao);
+    }
+
+    [Fact]
+    public void O_resumo_diz_qual_parte_divergiu()
+    {
+        // Era um sha256 de tudo junto, e o que chegava era "diferente". Mundo,
+        // mapa, comandos e modo de arredondamento apontam para lugares
+        // diferentes — saber qual foi poupa a rodada de comparar rastreio à mão.
+        Assert.Null(OpiniaoDeSincronia.DiferencaEntreResumos(
+            "fp:0|passo:100-108|mapa0:aaaaaaaa|mundo:bbbbbbbb|cmd:cccccccc",
+            "fp:0|passo:100-108|mapa0:aaaaaaaa|mundo:bbbbbbbb|cmd:cccccccc"));
+
+        Assert.Contains("mapa0", OpiniaoDeSincronia.DiferencaEntreResumos(
+            "fp:0|passo:100-108|mapa0:aaaaaaaa|mundo:bbbbbbbb|cmd:cccccccc",
+            "fp:0|passo:100-108|mapa0:99999999|mundo:bbbbbbbb|cmd:cccccccc")!);
+
+        // Arredondamento diferente é a primeira coisa a olhar: nenhum estado de
+        // RNG vai bater, e caçar sorteio nesse caso é caçar no lugar errado.
+        var fp = OpiniaoDeSincronia.DiferencaEntreResumos(
+            "fp:0|passo:100-108|mundo:bbbbbbbb",
+            "fp:1|passo:100-108|mundo:bbbbbbbb")!;
+        Assert.Contains("fp:", fp);
+
+        // Um mapa que só existe de um lado não pode passar como "igual".
+        Assert.Contains("só existe", OpiniaoDeSincronia.DiferencaEntreResumos(
+            "fp:0|passo:100-108|mapa0:aaaaaaaa|mapa1:dddddddd",
+            "fp:0|passo:100-108|mapa0:aaaaaaaa")!);
     }
 
     static SessaoBarreira Digital(string sessaoId, long tick, string digital) => new()

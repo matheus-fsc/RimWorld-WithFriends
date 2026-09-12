@@ -404,3 +404,49 @@ código de todos os mods que usa.
 
 Isso não impede o problema; faz dele uma linha no relatório, com remetente, em
 vez de um desync sem explicação. Ver `docs/adr/0018-custo-de-atualizacao-e-mods.md`.
+
+
+## Alcançabilidade: o que uma visita realmente toca
+
+A separação por balde ("parece simulação", "parece interface") é heurística por
+nome. Serve para ordenar a leitura; não serve para **cortar** a lista.
+
+O auditor agora responde a pergunta pelo IL: partindo do tick e das portas por
+onde um comando reentra na simulação, quais métodos o jogo consegue chamar?
+
+```
+alcance: 45.426 de 88.637 métodos alcançáveis
+fila real: 1.085 métodos tocam fonte local **e** rodam numa visita (de 2.417)
+Multiplayer × visita: 450 dos 878 alvos dele rodam dentro de uma visita
+```
+
+Metade do jogo não acontece numa visita: caravana, comércio, pesquisa, mapa do
+mundo (ADR 0009). Cada linha dessas na fila era leitura que não virava nada.
+
+### Erra para mais, nunca para menos
+
+Toda dúvida vira "alcançável": chamada virtual alcança todas as sobrescritas,
+chamada de interface alcança todas as implementações, sobrecarga alcança todas as
+homônimas, e nome curto colide de propósito no cruzamento com o Multiplayer.
+
+A assimetria é deliberada. `[visita]` a mais custa leitura; `[visita]` a menos
+descartaria justamente o caminho que diverge.
+
+### O que escapa
+
+Delegate, reflexão e ponteiro de função não aparecem no IL como chamada a um alvo
+nomeado, e o RimWorld usa os três — think nodes, work givers, `Action` de gizmo.
+Por isso os pontos de entrada incluem mais que o tick: `ThinkNode_Priority`,
+`WorkGiver_Scanner`, `JobDriver.MakeNewToils` e `IncidentWorker.TryExecute` estão
+lá porque o jogo chega neles por tabela de defs. Sem citá-los, metade do
+comportamento de pawn ficaria de fora por um detalhe de despacho, não por não
+acontecer numa visita.
+
+O preço aparece: dos 450 alvos herdados, uns 80 ainda citam caravana ou mundo,
+puxados por `IncidentWorker.TryExecute` — que **é** alcançável, porque o anfitrião
+pode provocar um incidente durante a visita.
+
+### `auditoria.fila-mp.txt`
+
+O arquivo com os 450. É a lista de sete anos de bug real do Multiplayer, cortada
+pelo nosso escopo — e se recalcula sozinha a cada versão do jogo.

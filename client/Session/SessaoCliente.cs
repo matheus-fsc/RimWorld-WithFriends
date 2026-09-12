@@ -514,20 +514,45 @@ public sealed class SessaoCliente
             $"(tick {pedido.TickAlvo}). O encontro continua.",
             MessageTypeDefOf.NeutralEvent, historical: true);
 
-        // Tudo o que descrevia o passo velho tem de sumir junto com ele.
-        Atual = Atual.APartirDoTick(pedido.TickAlvo);
-
         // O visitante não faz nada aqui: ele espera a partida chegar, e
         // `PartidaRecebida` cuida do resto — a mesma porta do bootstrap.
         if (VisitaEmAndamento.SouVisitante) return;
 
+        // **O ponto novo é o tick de jogo do instantâneo, não o passo antigo.**
+        //
+        // A primeira versão recomeçava em `pedido.TickAlvo` — o último passo de
+        // sessão em que as digitais bateram. Mas o que atravessa é um **save**,
+        // e um save está no tick de jogo em que foi tirado, não num passo de
+        // sessão de antes. Os dois lados carregavam o mesmo save e cada um
+        // remontava o par passo↔tick a partir do próprio relógio: medido, 98
+        // ticks de jogo de diferença no mesmo passo.
+        //
+        // O efeito era pior que não ressincronizar: as digitais nunca mais
+        // batiam, `UltimoTickValido` ficava preso no mesmo número, e as três
+        // ressincronizações da sessão eram gastas sem nenhuma chance de
+        // convergir.
+        //
+        // Ler o tick aqui é seguro porque `Ressincronizando` já parou o laço de
+        // tick: o jogo não anda entre esta linha e a serialização.
+        long tickDoInstantaneo = Find.TickManager.TicksGame;
+        Atual = Atual.APartirDoTick(tickDoInstantaneo);
+
+        Log.Message(
+            $"[WithFriends] ponto de junção novo no tick de jogo {tickDoInstantaneo} " +
+            $"(a divergência foi vista no passo {pedido.TickAlvo})");
+
         BootstrapDaPartida.Enviar(
-            Atual.SessaoId, pedido.TickAlvo, Atual, congelador.HashPreSessao);
+            Atual.SessaoId, tickDoInstantaneo, Atual, congelador.HashPreSessao);
     }
 
     public void PartidaRecebida(SessaoPartida mensagem)
     {
         if (Atual == null || mensagem.SessaoId != Atual.SessaoId) return;
+
+        // O tick de partida vem do **instantâneo**, sempre. No bootstrap isso
+        // não muda nada (os dois números coincidem); num ponto de junção refeito
+        // é o que mantém os dois lados no mesmo tick de jogo depois de carregar.
+        Atual = Atual.APartirDoTick(mensagem.Tick);
 
         BootstrapDaPartida.Receber(mensagem, Atual, congelador.HashPreSessao);
     }
