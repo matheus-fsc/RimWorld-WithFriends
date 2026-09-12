@@ -1,3 +1,4 @@
+using UnityEngine;
 using Verse;
 using WithFriends.Protocol.Messages;
 
@@ -71,14 +72,31 @@ public static class VisitaEmAndamento
         SouVisitante = souVisitante;
         Retomada = false;
 
+        // **O jogo não pode parar quando a janela perde o foco.**
+        //
+        // Numa visita o outro lado espera a barreira, e barreira não anda com um
+        // dos dois congelado. Sem "rodar em segundo plano", quem sai da janela
+        // trava os dois — e do lado de dentro isso é indistinguível de desconexão.
+        //
+        // Não dá para deixar isso na mão da preferência de cada um: duas
+        // instâncias na mesma máquina, que é como se testa, nunca estão as duas
+        // em foco. O Multiplayer força o mesmo, pelo mesmo motivo.
+        rodavaEmSegundoPlano = Application.runInBackground;
+        Application.runInBackground = true;
+
         Log.Message(
             $"[WithFriends] visita {inicio.SessaoId} atravessando a troca de partida — " +
             $"papel: {(souVisitante ? "visitante" : "anfitrião")}, " +
             $"ponto de retorno: {hashPreSessao ?? "(nenhum)"}");
     }
 
+    static bool rodavaEmSegundoPlano;
+
     public static void Limpar()
     {
+        // A preferência é do jogador: fora da visita, volta a ser dele.
+        Application.runInBackground = rodavaEmSegundoPlano;
+
         JogoDeOrigem = null;
         Inicio = null;
         HashPreSessao = null;

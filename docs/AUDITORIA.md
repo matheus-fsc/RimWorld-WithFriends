@@ -450,3 +450,36 @@ pode provocar um incidente durante a visita.
 
 O arquivo com os 450. É a lista de sete anos de bug real do Multiplayer, cortada
 pelo nosso escopo — e se recalcula sozinha a cada versão do jogo.
+
+
+## A interseção: onde as duas evidências concordam
+
+Cruzando `[visita]` com `[MP]` — o que a simulação de uma visita alcança **e** o
+Multiplayer já remenda — sobram 55 linhas. A maioria é ruído da
+sobre-aproximação (diálogos e janelas puxados por `IncidentWorker.TryExecute` →
+carta → `WindowStack`). O que sobrou de real tinha todo a mesma forma:
+
+**Um valor que cada jogador escolhe no menu de opções, lido de dentro do tick.**
+
+| preferência | onde entra | o que quebra |
+|---|---|---|
+| `AutomaticPauseMode` | `LetterStack.ReceiveLetter` | um lado pausa na carta, o outro não |
+| `PauseOnLoad` | carregamento | com a ressincronização os dois recarregam: um volta parado |
+| `AdaptiveTrainingEnabled` | treino de animal | aprendizado diferente dos dois lados |
+| `PreferredNames` | `PawnBioAndNameGenerator` | pawn novo com nome diferente — e nome é estado salvo |
+| `MaxNumberOfPlayerSettlements` | decisão de incidente | incidente acontece dentro da visita |
+
+Não há sorteio envolvido em nenhuma: **nenhum rastreio de RNG jamais as
+mostraria**. É divergência por configuração, e só uma lista cruzada acha.
+
+A saída é a do ADR 0014 em outra escala: em vez de combinar o valor, derivar —
+dentro da visita todo mundo usa o padrão do jogo, e não há o que combinar. A
+preferência do jogador continua intacta no arquivo dele.
+
+### E uma que não é determinismo, é o mesmo sintoma
+
+`Prefs.RunInBackground`. Sem ela, o jogo para quando a janela perde o foco — e
+numa visita isso trava **os dois**, porque a barreira não anda com um lado
+congelado. Do lado de dentro é indistinguível de desconexão, e duas instâncias na
+mesma máquina (que é como se testa) nunca estão as duas em foco. Forçada durante
+a visita e devolvida no fim.
