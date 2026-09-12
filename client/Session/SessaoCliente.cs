@@ -528,6 +528,20 @@ public sealed class SessaoCliente
 
         Atual = Atual.APartirDoTick(pedido.TickAlvo);
 
+        // **Despejar os rastreios agora, não só no aborto.**
+        //
+        // O momento interessante é este: os dois lados acabaram de divergir
+        // partindo de um estado idêntico, e daqui a dois segundos vão recarregar
+        // e apagar tudo. Guardar isto só para o aborto era guardar a evidência
+        // da última divergência e jogar fora as quatro anteriores — justamente as
+        // que a ressincronização existe para colher.
+        //
+        // A janela cobre 400 passos antes e 200 depois do ponto, então a
+        // divergência (que aparece 8 a 80 passos depois) cai inteira dentro.
+        RngDeSessao.Despejar($"ressincronização #{pedido.Numero}, passo {pedido.TickAlvo}");
+        RastreioDeRng.Despejar(pedido.TickAlvo);
+        RastreioDePawns.Despejar();
+
         // O visitante não faz nada aqui: ele espera a partida chegar, e
         // `PartidaRecebida` cuida do resto — a mesma porta do bootstrap.
         if (VisitaEmAndamento.SouVisitante) return;
