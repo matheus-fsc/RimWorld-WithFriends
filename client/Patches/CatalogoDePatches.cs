@@ -48,6 +48,14 @@ public static class CatalogoDePatches
         // com aviso legível em vez de silenciosamente deixar de proteger.
         new AlvoDePatch
         {
+            Tipo = typeof(RimWorld.UniqueIDsManager),
+            Membro = "GetNextID",
+            Recurso = "ids da interface são locais",
+            Motivo = "contador de ids é compartilhado e a interface o adianta de um lado só; " +
+                     "thingIDNumber é semente de IsHashIntervalTick e da rotação sorteada",
+        },
+        new AlvoDePatch
+        {
             Tipo = typeof(Projectile),
             Membro = "UpdateRateTicks",
             Recurso = "ritmo de atualização fora da câmera",
