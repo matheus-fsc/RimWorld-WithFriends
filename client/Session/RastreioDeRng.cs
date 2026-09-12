@@ -304,11 +304,47 @@ public static class RastreioDeRng
 [HarmonyPatch]
 public static class ContadorDeSorteios
 {
+    /// <summary>
+    /// Sorteios feitos **fora** do tick da sessão, desde o começo da visita.
+    ///
+    /// <para><b>A hipótese que isto testa.</b> A digital é o estado do
+    /// <c>Rand</c>, e o <c>Rand</c> do RimWorld é um gerador global e único. Se
+    /// alguma coisa sortear entre dois ticks — um alerta, um mote, uma janela,
+    /// qualquer desenho —, o estado anda sem que a simulação tenha andado. Os
+    /// dois lados então divergem sem que nada no jogo esteja diferente.</para>
+    ///
+    /// <para>É a suspeita mais forte para a divergência que reaparece 8 passos
+    /// depois de os dois lados carregarem o mesmo save: nenhuma simulação erra
+    /// tão rápido, mas duas interfaces diferentes — uma janela em foco, outra
+    /// não — erram na hora.</para>
+    ///
+    /// <para>Custa duas leituras estáticas e uma soma, então fica sempre ligado.
+    /// O rastreio por local de chamada responde <i>qual</i> sorteio; este
+    /// responde <i>se é dentro ou fora do tick</i>, que é a pergunta anterior e
+    /// muito mais barata.</para>
+    /// </summary>
+    public static long ForaDoTick { get; private set; }
+
+    public static void Zerar() => ForaDoTick = 0;
+
+    static void Contar()
+    {
+        if (!NaInterface.Tickando && RelogioDeSessaoRimWorld.EmSessao) ForaDoTick++;
+    }
+
     [HarmonyPatch(typeof(Rand), nameof(Rand.Value), MethodType.Getter)]
     [HarmonyPostfix]
-    public static void DepoisDeValue() => RastreioDeRng.Registrar();
+    public static void DepoisDeValue()
+    {
+        Contar();
+        RastreioDeRng.Registrar();
+    }
 
     [HarmonyPatch(typeof(Rand), nameof(Rand.Int), MethodType.Getter)]
     [HarmonyPostfix]
-    public static void DepoisDeInt() => RastreioDeRng.Registrar();
+    public static void DepoisDeInt()
+    {
+        Contar();
+        RastreioDeRng.Registrar();
+    }
 }

@@ -510,9 +510,19 @@ public sealed class SessaoCliente
             $"[WithFriends] ressincronizando (#{pedido.Numero}): voltando ao tick " +
             $"{pedido.TickAlvo}. {pedido.Explicacao}");
 
+        // **Não é uma volta no tempo, e dizer que é engana.**
+        //
+        // Ninguém guarda um instantâneo do passo em que as digitais ainda
+        // batiam. O que acontece é o anfitrião compartilhar o estado que ele tem
+        // **agora** e os dois partirem dali — o jogo não anda para trás, ele
+        // continua do estado do anfitrião. O passo de sessão é rebobinado porque
+        // é só um contador, e é ele que a barreira usa.
+        //
+        // Isso aparece no diário: cinco pontos de junção seguidos "voltando ao
+        // passo 1000" enquanto o tick de jogo sobe 73244 → 73536 → 73858.
         Messages.Message(
-            $"A visita divergiu e está voltando ao último ponto em que os dois batiam " +
-            $"(passo {pedido.TickAlvo}). O encontro continua.",
+            $"A visita divergiu. Adotando o estado do anfitrião e continuando " +
+            $"(passo {pedido.TickAlvo}).",
             MessageTypeDefOf.NeutralEvent, historical: true);
 
         Atual = Atual.APartirDoTick(pedido.TickAlvo);
@@ -970,7 +980,8 @@ public sealed class SessaoCliente
         Log.Message(
             $"[WithFriends/digital] passo {tickDeSessao}: tick de jogo " +
             $"{Find.TickManager.TicksGame}, {passosSimulados} simulados, " +
-            $"{passosSemSimular} só com comando");
+            $"{passosSemSimular} só com comando, " +
+            $"{ContadorDeSorteios.ForaDoTick} sorteio(s) fora do tick");
     }
 
     public void Agendar(SessaoComando comando)
