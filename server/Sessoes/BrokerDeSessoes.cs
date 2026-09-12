@@ -340,10 +340,24 @@ public sealed class BrokerDeSessoes
                                 relato.Fingerprint, doOutro)
                             ?? "(partes não reconhecidas)";
 
+                        // Quanto durou a paz depois do último ponto de junção.
+                        // É o que separa divergência de estado (volta tarde, o
+                        // recarregamento resolveu) de divergência de
+                        // comportamento (volta em alguns passos, partindo de
+                        // estados idênticos — e aí recarregar não resolve nada).
+                        string depoisDoPonto = sessao.PassoDoUltimoPonto < 0
+                            ? ""
+                            : $" Voltou {relato.Tick - sessao.PassoDoUltimoPonto} passo(s) depois " +
+                              $"do ponto de junção — " +
+                              (relato.Tick - sessao.PassoDoUltimoPonto <= 64
+                                  ? "os dois partiram de estados idênticos e se afastaram de novo, " +
+                                    "então é a SIMULAÇÃO que difere, não o estado."
+                                  : "o estado restaurado durou; esta é outra causa.");
+
                         string relatorio =
                             $"Ticks suspeitos: {string.Join(", ", sessao.TicksSuspeitos)}. " +
                             $"No tick {relato.Tick} divergiu em — {ondeDiferiu}. " +
-                            $"Último ponto consistente: {sessao.UltimoTickValido}.";
+                            $"Último ponto consistente: {sessao.UltimoTickValido}.{depoisDoPonto}";
 
                         sessao.RelatoriosDeDivergencia.Add(relatorio);
 
@@ -448,6 +462,14 @@ public sealed class BrokerDeSessoes
         bool osDoisChegaram = sessao.TickPorParticipante.Count >= 2;
         if (!osDoisChegaram)
         {
+            // Quem já chegou não recebe o pedido de novo. A resposta é
+            // difundida para os dois, e repetir "ressincronize" para quem acabou
+            // de voltar é pedir que ele recomece — laço.
+            //
+            // O reenvio existe para o lado que perdeu a mensagem no meio do
+            // recarregamento, e esse é exatamente o que ainda não relatou.
+            if (relato.Tick >= alvo) return null;
+
             return new SessaoRessincronizar
             {
                 SessaoId = sessao.Id,

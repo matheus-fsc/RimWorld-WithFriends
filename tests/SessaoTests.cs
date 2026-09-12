@@ -597,11 +597,17 @@ public class SessaoTests
         }, out string? recusa));
         Assert.Contains("ressincronizando", recusa!, StringComparison.OrdinalIgnoreCase);
 
-        // Um lado chegou: ainda espera o outro, e o pedido é reenviado — se ele
-        // se perdesse num recarregamento, a sessão ficaria pendurada.
-        var esperando = broker.Barreira(Anfitriao,
-            new SessaoBarreira { SessaoId = inicio.SessaoId, Tick = pedido.TickAlvo }, t);
-        Assert.IsType<SessaoRessincronizar>(esperando);
+        // Um lado chegou: ele **não** recebe o pedido de novo. A resposta é
+        // difundida para os dois, e repetir "ressincronize" para quem acabou de
+        // voltar é pedir que ele recomece — foi assim que duas ressincronizações
+        // viraram jogo congelado.
+        Assert.Null(broker.Barreira(Anfitriao,
+            new SessaoBarreira { SessaoId = inicio.SessaoId, Tick = pedido.TickAlvo }, t));
+
+        // Quem ainda está atrás continua recebendo — é para ele que o reenvio
+        // existe, caso a mensagem tenha se perdido no meio do recarregamento.
+        Assert.IsType<SessaoRessincronizar>(broker.Barreira(Visitante,
+            new SessaoBarreira { SessaoId = inicio.SessaoId, Tick = pedido.TickAlvo - 50 }, t));
 
         // Os dois chegaram: a visita continua.
         var voltou = broker.Barreira(Visitante,

@@ -50,6 +50,23 @@ public static class VisitaEmAndamento
 
     public static bool Ativa => Inicio != null;
 
+    /// <summary>
+    /// A última ressincronização já tratada por **esta visita** — não por esta
+    /// partida.
+    ///
+    /// <para>Mora aqui, e não no componente de sessão, porque o componente morre
+    /// no recarregamento e a visita não. O pedido de ressincronizar é reenviado
+    /// enquanto os dois lados não chegam ao passo novo; do outro lado do
+    /// recarregamento, um contador zerado faz o reenvio parecer um pedido novo —
+    /// e o lado que acabou de voltar recomeça tudo, manda a partida de novo, e a
+    /// visita entra em laço.</para>
+    ///
+    /// <para>Foi assim que duas ressincronizações viraram jogo congelado: um lado
+    /// preso em "ressincronizando" (onde não se relata barreira) e o outro parado
+    /// na barreira esperando um relato que não vinha mais.</para>
+    /// </summary>
+    public static int UltimaRessincronizacao { get; set; }
+
     public static void Comecar(SessaoInicio inicio, string? hashPreSessao, string? saveDaVisita, bool souVisitante)
     {
         JogoDeOrigem = Current.Game;
@@ -94,6 +111,8 @@ public static class VisitaEmAndamento
 
     public static void Limpar()
     {
+        UltimaRessincronizacao = 0;
+
         // A preferência é do jogador: fora da visita, volta a ser dele.
         Application.runInBackground = rodavaEmSegundoPlano;
 

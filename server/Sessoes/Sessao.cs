@@ -86,6 +86,21 @@ public sealed class Sessao
     /// <summary>Divergências já registradas nesta sessão, para o relatório do fim.</summary>
     public List<string> RelatoriosDeDivergencia { get; } = new();
 
+    /// <summary>
+    /// Passo em que o último ponto de junção foi refeito, ou -1.
+    ///
+    /// <para>Serve para uma pergunta que separa duas doenças muito diferentes:
+    /// <b>quantos passos a divergência levou para voltar</b> depois de os dois
+    /// lados partirem de um estado idêntico.</para>
+    ///
+    /// <para>Voltou depois de muito tempo: era divergência de <b>estado</b>, e
+    /// ressincronizar resolveu — o que veio depois é outra causa. Voltou em
+    /// alguns passos: é divergência de <b>comportamento</b>, e nenhum
+    /// recarregamento vai resolver, porque os dois lados partem iguais e se
+    /// afastam de novo. Só a segunda justifica gastar o orçamento.</para>
+    /// </summary>
+    public long PassoDoUltimoPonto { get; internal set; } = -1;
+
     /// <summary>Ensaio não compara digitais: ver <see cref="TipoSessao.Ensaio"/>.</summary>
     public bool CompararDigitais => Tipo != TipoSessao.Ensaio;
 
@@ -457,6 +472,7 @@ public sealed class Sessao
         ultimoCarimbo = tick - 1;
         passoParado = null;
         UltimoTickValido = tick;
+        PassoDoUltimoPonto = tick;
     }
 
     public long TickLiberado()

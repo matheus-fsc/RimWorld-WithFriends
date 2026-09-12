@@ -479,8 +479,6 @@ public sealed class SessaoCliente
     /// Chegou a partida do anfitrião. A partir daqui o visitante **troca de
     /// jogo**: o que precisa sobreviver vai para <see cref="VisitaEmAndamento"/>.
     /// </summary>
-    int ultimaRessincronizacao;
-
     /// <summary>
     /// Refaz o ponto de junção no meio da visita, em vez de perder o encontro.
     ///
@@ -499,8 +497,11 @@ public sealed class SessaoCliente
     public void Ressincronizar(SessaoRessincronizar pedido)
     {
         if (Atual == null || pedido.SessaoId != Atual.SessaoId) return;
-        if (pedido.Numero <= ultimaRessincronizacao) return;
-        ultimaRessincronizacao = pedido.Numero;
+        // O contador vive fora da partida (ver `VisitaEmAndamento`): este
+        // componente morre no recarregamento, e é justamente depois dele que o
+        // reenvio chega.
+        if (pedido.Numero <= VisitaEmAndamento.UltimaRessincronizacao) return;
+        VisitaEmAndamento.UltimaRessincronizacao = pedido.Numero;
 
         Estado = EstadoSessaoLocal.Ressincronizando;
         agenda.Clear();
