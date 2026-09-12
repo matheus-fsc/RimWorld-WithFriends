@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using UnityEngine;
 using Verse;
 
 namespace WithFriends.Client.Session;
@@ -71,9 +73,55 @@ public static class RastreioDePawns
         foreach (var pawn in mapa.mapPawns.AllPawns.Where(p => p.Spawned).OrderBy(p => p.thingIDNumber))
             linhas.Add(Linha(pawn));
 
+        // **Projéteis também.**
+        //
+        // Uma divergência em combate apareceu como "o tiro acertou no tick 2306
+        // de um lado e não do outro", e o rastreio de pawn não via nada: bala
+        // não é pawn. O rastreio de RNG só mostrava a consequência — o sorteio
+        // do dano e do sangue —, nunca o que fez o impacto cair noutro tick.
+        //
+        // São poucos por tick, e só enquanto há combate: o custo aparece
+        // exatamente quando o diagnóstico é preciso.
+        foreach (var projetil in mapa.listerThings.ThingsInGroup(ThingRequestGroup.Projectile)
+                     .OfType<Projectile>()
+                     .OrderBy(p => p.thingIDNumber))
+            linhas.Add(Linha(projetil));
+
         porTick[tickDeSessao] = linhas;
         ordem.Enqueue(tickDeSessao);
         while (ordem.Count > AmostrasGuardadas) porTick.Remove(ordem.Dequeue());
+    }
+
+    static readonly System.Reflection.FieldInfo? TicksAteImpacto =
+        HarmonyLib.AccessTools.Field(typeof(Projectile), "ticksToImpact");
+
+    static readonly System.Reflection.FieldInfo? Origem =
+        HarmonyLib.AccessTools.Field(typeof(Projectile), "origin");
+
+    /// <summary>
+    /// A linha de um projétil: onde está, quanto falta para impactar, e em quem.
+    ///
+    /// <para><c>ticksToImpact</c> é o campo que decide o tick do impacto, e é
+    /// ele que precisa bater entre os dois lados. Se ele diverge, o dano cai em
+    /// ticks diferentes e todo o resto desanda atrás.</para>
+    /// </summary>
+    static string Linha(Projectile projetil)
+    {
+        var alvo = projetil.usedTarget;
+        object? restante = null;
+        try { restante = TicksAteImpacto?.GetValue(projetil); } catch (Exception) { }
+
+        Vector3 origem = default;
+        try { if (Origem?.GetValue(projetil) is Vector3 v) origem = v; } catch (Exception) { }
+
+        return
+            $"    ={projetil.thingIDNumber,-7} {projetil.def?.defName ?? "-",-14} " +
+            $"pos {projetil.Position.x,3},{projetil.Position.z,3}  " +
+            $"exato {projetil.ExactPosition.x,8:F3},{projetil.ExactPosition.z,8:F3}  " +
+            $"impacto em {restante ?? "-",-5} " +
+            $"origem {origem.x,7:F2},{origem.z,7:F2}  " +
+            $"alvo {(alvo.IsValid ? $"{alvo.Cell.x},{alvo.Cell.z}" : "-"),-9} " +
+            $"lancador {projetil.Launcher?.thingIDNumber.ToString() ?? "-"}";
     }
 
     static string Linha(Pawn pawn)
