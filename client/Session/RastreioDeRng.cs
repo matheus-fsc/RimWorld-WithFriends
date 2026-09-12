@@ -29,8 +29,25 @@ namespace WithFriends.Client.Session;
 /// </summary>
 public static class RastreioDeRng
 {
-    /// <summary>Ticks de rastreio guardados. Cobre a detecção, que vem depois.</summary>
-    const int TicksGuardados = 400;
+    /// <summary>
+    /// Ticks de rastreio guardados.
+    ///
+    /// <para>Eram 400, e não bastavam. O histórico de RNG (que guarda 4.000)
+    /// apontou a primeira divergência de uma sessão no tick <b>3604</b>; quando
+    /// a detecção veio e o despejo aconteceu, o anel de locais já só tinha de
+    /// 3.720 em diante. O instrumento que diz <b>onde</b> tinha esquecido
+    /// justamente o tick que o instrumento que diz <b>quando</b> apontava.</para>
+    ///
+    /// <para>A detecção vem até algumas centenas de passos depois da causa: são
+    /// três amostras de digital sem bater, de oito em oito, mais o trânsito. O
+    /// anel precisa cobrir essa distância com folga, e agora cobre a mesma que o
+    /// histórico.</para>
+    ///
+    /// <para>Custa memória — dezenas de MB com muitos locais distintos. Durante o
+    /// diagnóstico isso é troca boa: sem o anel largo, cada divergência custa uma
+    /// reprodução a mais.</para>
+    /// </summary>
+    const int TicksGuardados = 4000;
 
     /// <summary>
     /// Quadros de pilha que identificam um local de chamada.
