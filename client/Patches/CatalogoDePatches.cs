@@ -48,6 +48,14 @@ public static class CatalogoDePatches
         // com aviso legível em vez de silenciosamente deixar de proteger.
         new AlvoDePatch
         {
+            Tipo = typeof(Projectile),
+            Membro = "UpdateRateTicks",
+            Recurso = "ritmo de atualização fora da câmera",
+            Motivo = "projétil sobrescreve o getter e decide por InViewOf: a bala andava " +
+                     "de 1 em 1 tick para quem olhava e de 15 em 15 para o outro",
+        },
+        new AlvoDePatch
+        {
             Tipo = typeof(RimWorld.StatWorker),
             Membro = "temporaryStatCache",
             Recurso = "caches de combate fora da interface",

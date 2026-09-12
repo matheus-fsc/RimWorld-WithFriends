@@ -541,3 +541,56 @@ A lição não é "leia a lista". É que a lista dá **candidatos** e o rastreio
 **evidência** — e sem evidência não dá para ordenar candidatos, porque todos
 parecem plausíveis. O que faltava não era saber que `TweenedPos` é local; era
 saber que era *ele*, naquele tick, por aquela cadeia.
+
+
+## O ritmo variável de atualização (VTR), e por que só combate quebrava
+
+O RimWorld 1.6 trouxe ritmo de atualização variável: cada `Thing` tem
+`UpdateRateTicks`, e o que está fora da tela é atualizado de 15 em 15 ticks.
+
+```csharp
+// Verse.Thing
+public virtual int UpdateRateTicks => GenTicks.GetCameraUpdateRate(this);
+
+// Verse.Projectile — SOBRESCREVE, e nunca passa pela base
+public override int UpdateRateTicks =>
+    Spawned && Find.CurrentMap == Map && Find.CameraDriver.InViewOf(this) ? 1 : 15;
+
+// RimWorld.Planet.WorldObject
+protected virtual int UpdateRateTicks => WorldRendererUtility.WorldSelected ? 1 : 15;
+```
+
+Nós neutralizamos `GetCameraUpdateRate` cedo — foi a correção de "falha ao mover
+a câmera". Mas `Projectile` sobrescreve o getter: a bala anda de tick em tick
+para quem está olhando e de quinze em quinze para o outro, `ticksToImpact` é
+decrementado pelo delta, e o impacto cai em ticks diferentes.
+
+Medido, nos dois diários da mesma visita — os ticks com `Bullet.Impact`:
+
+```
+A:  2309, 2312, 2316, 2348
+B:  2306, 2309,       2316
+```
+
+**É por isso que todo desync medido foi em combate.** Fora dele não há projétil.
+Construir, mover, alistar, estoque — nenhum cria um objeto cujo ritmo de
+simulação dependa de para onde a câmera aponta.
+
+### A forma do erro, pela segunda vez
+
+Já tínhamos sido mordidos por ela: `Designator_Build` sobrescrevendo
+`DesignateSingleCell` enquanto remendávamos a base. **Remendar a fonte cobre os
+chamadores dela, não quem a substitui.** Por isso o guarda do mundo usa
+`TargetMethods` percorrendo as subclasses, em vez de remendar só a declaração.
+
+### Como o Multiplayer trata
+
+Para ele o ritmo é estado **compartilhado**, não derivado:
+`VTRSync.GetSynchronizedUpdateRate` devolve o VTR do componente de tempo daquele
+mapa, e trocar de mapa observado vira **comando de rede** — todos os clientes
+precisam concordar sobre quais mapas têm alguém olhando. Ele não deriva o ritmo;
+ele o negocia.
+
+Aqui um valor fixo basta, porque a única propriedade que importa é ser igual dos
+dois lados: projétil em 1 (são poucos, vivem pouco, e 1 é o ritmo de maior
+fidelidade), objeto de mundo em 15.
