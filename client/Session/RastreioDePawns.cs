@@ -92,6 +92,37 @@ public static class RastreioDePawns
         while (ordem.Count > AmostrasGuardadas) porTick.Remove(ordem.Dequeue());
     }
 
+    /// <summary>
+    /// O <c>delta</c> com que <c>HealthTickInterval</c> foi chamado pela última
+    /// vez, por pawn.
+    ///
+    /// <para><b>A última variável da fórmula.</b> Seis divergências seguidas
+    /// caíram no mesmo <c>DropBloodFilth</c>:</para>
+    ///
+    /// <code>
+    /// float num = BleedRateTotal * BodySize * (deitado ? 0.0004f : 0.004f);
+    /// if (Rand.Chance(num * delta)) DropBloodFilth();
+    /// </code>
+    ///
+    /// <para>Taxa, corpo, postura, hediffs, ritmo e fase batem — a taxa agora em
+    /// precisão total, bit a bit. A posição no gerador bate no tick anterior. Só
+    /// o <c>delta</c> nunca foi medido: o campo <c>tickDelta</c> que a linha já
+    /// mostra é lido <b>depois</b> do tick, quando já foi zerado, então mostra a
+    /// fase do ciclo e não o valor que multiplicou a probabilidade.</para>
+    ///
+    /// <para>Aqui ele é capturado no instante da chamada. Se bater nos dois
+    /// lados, a fórmula inteira está eliminada e a causa está fora dela — na
+    /// ordem em que os pawns são tickados, que muda qual deles consome qual
+    /// sorteio.</para>
+    /// </summary>
+    static readonly Dictionary<int, int> deltaDaSaude = new();
+
+    public static void AnotarDeltaDaSaude(Pawn pawn, int delta) =>
+        deltaDaSaude[pawn.thingIDNumber] = delta;
+
+    static int DeltaDaSaude(Pawn pawn) =>
+        deltaDaSaude.TryGetValue(pawn.thingIDNumber, out var d) ? d : -1;
+
     static readonly System.Reflection.FieldInfo? DeltaDoTick =
         HarmonyLib.AccessTools.Field(typeof(Thing), "tickDelta");
 
@@ -207,7 +238,7 @@ public static class RastreioDePawns
             $"sangue {(pawn.health?.hediffSet?.BleedRateTotal ?? 0f).ToString("R"),-12} " +
             $"hediffs {pawn.health?.hediffSet?.hediffs?.Count ?? 0,3}  " +
             $"ritmo {pawn.UpdateRateTicks,3} " +
-            $"delta {Delta(pawn),3} " +
+            $"delta {Delta(pawn),3} saude {DeltaDaSaude(pawn),3} " +
             $"postura {(int)RimWorld.PawnUtility.GetPosture(pawn)} " +
             $"corpo {pawn.BodySize.ToString("R")}";
     }
@@ -231,5 +262,29 @@ public static class RastreioDePawns
             foreach (var linha in porTick[tick]) texto.AppendLine(linha);
             Log.Message(texto.ToString());
         }
+    }
+}
+
+/// <summary>
+/// Anota com que <c>delta</c> a saúde de cada pawn foi tickada.
+///
+/// <para>Prefixo puro de leitura — não muda nada, só registra. Ver
+/// <c>RastreioDePawns.AnotarDeltaDaSaude</c> para por que esta é a última
+/// variável que faltava medir.</para>
+/// </summary>
+[HarmonyLib.HarmonyPatch(typeof(Pawn_HealthTracker), nameof(Pawn_HealthTracker.HealthTickInterval))]
+public static class DeltaDaSaudeAnotado
+{
+    // `pawn` é campo privado do tracker: alcançado por reflexão, como todo
+    // acoplamento interno.
+    static readonly System.Reflection.FieldInfo? CampoDoPawn =
+        HarmonyLib.AccessTools.Field(typeof(Pawn_HealthTracker), "pawn");
+
+    [HarmonyLib.HarmonyPrefix]
+    public static void Antes(Pawn_HealthTracker __instance, int delta)
+    {
+        if (!RastreioDePawns.Ligado) return;
+        if (CampoDoPawn?.GetValue(__instance) is Pawn pawn)
+            RastreioDePawns.AnotarDeltaDaSaude(pawn, delta);
     }
 }
