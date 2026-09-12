@@ -43,6 +43,23 @@ public static class CatalogoDePatches
             Recurso = "checkpoint automático",
             Motivo = "ler o save que o jogo acabou de escrever, sem serializar de novo (ADR 0005)",
         },
+        // Os dois caches que a interface envenena, e que só doem em combate.
+        // Campos privados: se o jogo renomear qualquer um, o recurso desliga
+        // com aviso legível em vez de silenciosamente deixar de proteger.
+        new AlvoDePatch
+        {
+            Tipo = typeof(RimWorld.StatWorker),
+            Membro = "temporaryStatCache",
+            Recurso = "caches de combate fora da interface",
+            Motivo = "valor de stat calculado pela interface não pode ficar no cache da simulação",
+        },
+        new AlvoDePatch
+        {
+            Tipo = typeof(PawnCapacitiesHandler),
+            Membro = "cachedCapacityLevels",
+            Recurso = "caches de combate fora da interface",
+            Motivo = "nível de capacidade calculado pela interface não pode ficar no cache da simulação",
+        },
         new AlvoDePatch
         {
             Tipo = typeof(Rand),
