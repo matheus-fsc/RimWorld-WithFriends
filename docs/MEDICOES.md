@@ -621,3 +621,35 @@ boa parte, reflexão.
 que recebe entrada inválida não é exceção — é sinal, e o processo morre. Quando
 o caminho passa por metadado de método dinâmico, a defesa é **não perguntar**,
 não é embrulhar em try.
+
+
+## 12/09 — a primeira visita longa com combate e sem ressincronizar
+
+| | |
+|---|---|
+| passos | **19.504**, sem uma única ressincronização |
+| antes, no mesmo cenário | divergência voltando a cada 8 a 80 passos |
+| combate | sim (o guarda de `Projectile.UpdateRateTicks` disparou) |
+| remendos instalados | 55 classes, zero falhas |
+
+Os guardas que dispararam e são novos:
+
+```
+PawnTweener.TweenedPos (dentro do tick)
+Projectile.UpdateRateTicks (câmera)
+semente fixa ao carregar a partida
+semente fixa em Map.ExposeData / Map.FinalizeLoading
+StatWorker.GetValue (cache da interface desfeito)
+id pedido pela interface (local, negativo)
+```
+
+Os dois primeiros são os únicos que tinham **evidência direta** nos diários antes
+de serem escritos — a cadeia do rastro de sangue e os ticks de `Bullet.Impact`
+diferentes. Os outros vieram de derivação a partir do Multiplayer, e não dá para
+atribuir a melhora a eles com os dados que temos: só se sabe que estão ativos.
+
+Uma medida que merece registro: `sorteios fora do tick` chegou a **819.053** de
+um lado e **342.376** do outro. A diferença é enorme e **não é problema** — são
+os geradores separados (`RngDeSessao` troca o estado em volta de cada tick), e o
+número só confirma o quanto a interface consome. Se um dia esses dois números
+precisarem bater, é porque a separação quebrou.
