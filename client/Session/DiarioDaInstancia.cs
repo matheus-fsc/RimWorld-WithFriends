@@ -59,7 +59,19 @@ public static class DiarioDaInstancia
                 string quem = playerId.Length >= 8 ? playerId.Substring(0, 8) : "sem-id";
                 Caminho = Path.Combine(pasta, $"{DateTime.Now:yyyyMMdd-HHmmss}-{quem}.log");
 
-                arquivo = new StreamWriter(Caminho, append: true, Encoding.UTF8) { AutoFlush = true };
+                // **Sem AutoFlush.**
+                //
+                // Com ele, cada linha vira uma chamada ao disco. O despejo de
+                // uma ressincronização são ~44 mil linhas e 10,7 MB: quarenta e
+                // quatro mil descargas seguidas, no meio do quadro, com o jogo
+                // parado esperando. Foi tempo suficiente para a conexão com o
+                // coordenador ser derrubada, e a partida que o anfitrião ia
+                // mandar morreu num socket já descartado.
+                //
+                // A descarga passa a ser por linha importante e por lote — ver
+                // `Escrever`. Diário é instrumento; instrumento que atrapalha a
+                // medição não mede.
+                arquivo = new StreamWriter(Caminho, append: true, Encoding.UTF8) { AutoFlush = false };
 
                 foreach (var linha in Antecipadas) arquivo.WriteLine(linha);
                 Antecipadas.Clear();
@@ -91,6 +103,11 @@ public static class DiarioDaInstancia
     /// A última mensagem aceita era nossa? Ver <see cref="Escrever"/>.
     /// </summary>
     static bool ultimaFoiNossa;
+
+    /// <summary>Linhas comuns entre duas descargas ao disco.</summary>
+    const int DescarregarACada = 512;
+
+    static int desdeADescarga;
 
     static void Escrever(string nivel, string texto)
     {
@@ -124,7 +141,23 @@ public static class DiarioDaInstancia
                 return;
             }
 
-            try { arquivo.WriteLine(linha); }
+            try
+            {
+                arquivo.WriteLine(linha);
+
+                // Erro e aviso vão para o disco na hora: são exatamente o que
+                // se procura quando o processo morre em seguida, e é justamente
+                // aí que o que ficou no buffer se perde.
+                //
+                // O resto sai em lote. `DescarregarACada` é um meio-termo
+                // medido: linha demais no buffer arrisca perder contexto num
+                // crash, descarga demais era o problema original.
+                if (nivel != "msg" || ++desdeADescarga >= DescarregarACada)
+                {
+                    arquivo.Flush();
+                    desdeADescarga = 0;
+                }
+            }
             catch { /* disco cheio, arquivo removido: o jogo não para por isso */ }
         }
     }

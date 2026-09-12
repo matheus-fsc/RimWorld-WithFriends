@@ -538,8 +538,18 @@ public sealed class SessaoCliente
         //
         // A janela cobre 400 passos antes e 200 depois do ponto, então a
         // divergência (que aparece 8 a 80 passos depois) cai inteira dentro.
+        // **Janela estreita na ressincronização, anel inteiro só no aborto.**
+        //
+        // O anel guarda 1.200 ticks e despejá-lo inteiro deu 44 mil linhas e
+        // 10,7 MB — de uma vez, no meio do quadro, com o jogo parado. Derrubou a
+        // conexão e a partida que ia ser enviada morreu num socket descartado.
+        //
+        // E era desperdício: hoje sabemos que a divergência aparece dentro de
+        // ~100 passos do ponto de junção, então 200 para cada lado cobrem o que
+        // interessa. O anel largo continua valendo para o aborto, que acontece
+        // uma vez e onde não há mais nada a proteger.
         RngDeSessao.Despejar($"ressincronização #{pedido.Numero}, passo {pedido.TickAlvo}");
-        RastreioDeRng.Despejar(pedido.TickAlvo);
+        RastreioDeRng.Despejar(pedido.TickAlvo, ticksAntes: 200, ticksDepois: 200);
         RastreioDePawns.Despejar();
 
         // **Esvaziar os rastreios antes de recarregar.**
