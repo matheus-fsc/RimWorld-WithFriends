@@ -22,6 +22,16 @@
 #   tools/dois-jogos.sh --servidor      sobe o coordenador junto
 #   tools/dois-jogos.sh --so-segundo    abre só a segunda instância
 #   tools/dois-jogos.sh --matar         só fecha o que estiver aberto
+#   tools/dois-jogos.sh --arbitro NOME  a segunda instância vira árbitro
+#
+# O árbitro (docs/ARBITRO.md) toma a vaga do visitante e simula sem desenhar:
+# sem câmera, sem mouse, sem janela em foco. Serve para responder qual dos dois
+# lados desvia, que é o que duas instâncias humanas não conseguem dizer.
+#
+#   tools/dois-jogos.sh --servidor --arbitro Colonia
+#
+# NOME é o save que ele abre, e precisa ser do MESMO PLANETA que o do anfitrião
+# — senão o coordenador recusa com "planeta divergente" e nada acontece.
 
 set -euo pipefail
 
@@ -34,16 +44,29 @@ COMPILAR=1
 COM_SERVIDOR=0
 SO_SEGUNDO=0
 SO_MATAR=0
+SAVE_ARBITRO=""
 
-for arg in "$@"; do
-    case "$arg" in
+while [[ $# -gt 0 ]]; do
+    case "$1" in
         --sem-build)  COMPILAR=0 ;;
         --servidor)   COM_SERVIDOR=1 ;;
         --so-segundo) SO_SEGUNDO=1 ;;
         --matar)      SO_MATAR=1 ;;
-        -h|--help)    sed -n '2,30p' "${BASH_SOURCE[0]}"; exit 0 ;;
-        *)            echo "opção desconhecida: $arg (use --help)" >&2; exit 2 ;;
+        --arbitro)
+            # O nome do save vem depois, separado. Sem ele o árbitro sobe no
+            # menu principal e fica lá: aceitar uma visita exige estar dentro
+            # de uma partida.
+            shift
+            [[ $# -gt 0 ]] || { echo "--arbitro precisa do nome do save" >&2; exit 2; }
+            SAVE_ARBITRO="$1"
+            ;;
+        --arbitro=*)  SAVE_ARBITRO="${1#*=}" ;;
+        # O cabeçalho inteiro é a ajuda: imprime até a primeira linha que não
+        # é comentário, para não quebrar quando o texto crescer.
+        -h|--help)    sed -n '2,/^[^#]/p' "${BASH_SOURCE[0]}" | sed '$d'; exit 0 ;;
+        *)            echo "opção desconhecida: $1 (use --help)" >&2; exit 2 ;;
     esac
+    shift
 done
 
 if [[ ! -x "$JOGO/RimWorldLinux" ]]; then
@@ -96,15 +119,33 @@ if [[ $SO_SEGUNDO -eq 0 ]]; then
     sleep 3
 fi
 
-echo "== abrindo jogador 2  (pasta de dados: $DADOS_P2)"
-nohup ./RimWorldLinux -savedatafolder="$DADOS_P2" -logFile "$LOG_P2" > /dev/null 2>&1 &
+if [[ -n "$SAVE_ARBITRO" ]]; then
+    echo "== abrindo o ÁRBITRO  (save: $SAVE_ARBITRO, pasta: $DADOS_P2)"
+    nohup ./RimWorldLinux \
+        -batchmode -nographics \
+        -arbitro -arbitrosave="$SAVE_ARBITRO" \
+        -savedatafolder="$DADOS_P2" -logFile "$LOG_P2" > /dev/null 2>&1 &
+    SEGUNDO="árbitro"
+else
+    echo "== abrindo jogador 2  (pasta de dados: $DADOS_P2)"
+    nohup ./RimWorldLinux -savedatafolder="$DADOS_P2" -logFile "$LOG_P2" > /dev/null 2>&1 &
+    SEGUNDO="jogador 2"
+fi
+
+DIARIO_P1="$DADOS_P1/WithFriends/diario"
+DIARIO_P2="$DADOS_P2/WithFriends/diario"
 
 cat <<FIM
 
 pronto. logs separados:
 
   jogador 1   $LOG_P1
-  jogador 2   $LOG_P2
+  $SEGUNDO    $LOG_P2
+
+os diários do mod (é o que se compara depois de um desync) ficam em:
+
+  $DIARIO_P1
+  $DIARIO_P2
 
 acompanhar os dois lado a lado:
 
@@ -112,3 +153,13 @@ acompanhar os dois lado a lado:
   tail -f "$LOG_P2" | grep --line-buffered WithFriends
 
 FIM
+
+if [[ -n "$SAVE_ARBITRO" ]]; then
+cat <<FIM
+o árbitro aceita o convite sozinho — convide pelo jogador 1 e não faça mais
+nada. Ele não desenha, não dá ordem e não vota no tempo.
+
+o que cada resultado quer dizer está em docs/ARBITRO.md.
+
+FIM
+fi

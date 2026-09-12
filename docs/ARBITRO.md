@@ -51,8 +51,15 @@ comparar simulações, e não jogar, isso não custa nada.
 ## Como rodar
 
 ```
+tools/dois-jogos.sh --servidor --arbitro NomeDoSave
+```
+
+Isso compila, sobe o coordenador, abre o anfitrião normalmente e põe o árbitro na
+vaga do visitante. Por baixo:
+
+```
 RimWorldLinux -batchmode -nographics -arbitro -arbitrosave=NomeDoSave \
-              -savedatafolder=/caminho/da/instancia
+              -savedatafolder=/caminho/da/instancia -logFile …
 ```
 
 - `-arbitro` liga o modo: não desenha, volume zero, conecta sozinho, aceita o
