@@ -159,6 +159,25 @@ public static class RastreioDePawns
             $"custo {pather?.nextCellCostLeft ?? 0f,8:F3}/{pather?.nextCellCostTotal ?? 0f,8:F3}  " +
             $"dest {(pather?.Destination.IsValid == true ? $"{pather.Destination.Cell.x},{pather.Destination.Cell.z}" : "-"),-9} " +
             $"job {job?.def?.defName ?? "-",-22} " +
+            // **Quando o job começou e quando ele expira.**
+            //
+            // Uma divergência apareceu como um javali trocando `Wait_Wander` por
+            // `Wait_MaintainPosture` num lado e não no outro — quinze ticks
+            // antes de qualquer diferença de sorteio. O jogo faz isso quando um
+            // job **termina** com sucesso e o pawn não está andando:
+            //
+            //   if (condition == Succeeded && jobDef != Wait_MaintainPosture && …)
+            //       if (!pawn.pather.Moving)
+            //           StartJob(MakeJob(Wait_MaintainPosture, 1));
+            //
+            // Ou seja: o job de um lado acabou e o do outro não. E a duração de
+            // `Wait_Wander` é `expiryInterval = ticksBetweenWandersRange
+            // .RandomInRange` — sorteada na criação.
+            //
+            // Sem estes dois números não dá para distinguir "começou em ticks
+            // diferentes" de "sorteou durações diferentes", e são causas em
+            // lugares opostos.
+            $"desde {job?.startTick ?? -1,7} expira {job?.expiryInterval ?? -1,6}  " +
             $"fila {pawn.jobs?.jobQueue?.Count ?? 0}  " +
             $"draft {(pawn.drafter?.Drafted == true ? 1 : 0)}  " +
             // Sangramento e ritmo de atualização: os dois entram na decisão de
