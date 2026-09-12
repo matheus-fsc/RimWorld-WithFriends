@@ -46,6 +46,20 @@ public sealed class BrokerDeSessoes
     /// </summary>
     public const int RessincronizacoesPorSessao = 5;
 
+    /// <summary>
+    /// Quantos passos um ponto de junção precisa sobreviver para ter valido a
+    /// pena.
+    ///
+    /// <para>Menos que isto e os dois lados partiram de um estado idêntico e se
+    /// afastaram de novo — divergência de <b>simulação</b>, que nenhum
+    /// recarregamento conserta. Insistir aí é o laço que o jogador vê.</para>
+    ///
+    /// <para>64 passos são pouco mais de um segundo a 1×: tempo de sobra para um
+    /// desync de estado aparecer, e curto demais para um de comportamento
+    /// esperar.</para>
+    /// </summary>
+    public const int PassosParaOPontoValer = 64;
+
     readonly object trava = new();
     readonly Dictionary<string, Convite> convites = new();
     readonly Dictionary<string, Sessao> sessoes = new();
@@ -368,12 +382,34 @@ public sealed class BrokerDeSessoes
                         // Refazendo o ponto de junção, uma visita rende vários
                         // relatórios em vez de um, e as causas restantes aparecem
                         // em lote.
-                        if (sessao.Ressincronizacoes < RessincronizacoesPorSessao)
+                        // **Não insistir no que já se provou inútil.**
+                        //
+                        // Se a divergência voltou poucos passos depois do ponto
+                        // de junção, os dois lados partiram de um estado
+                        // idêntico e se afastaram de novo: é a simulação que
+                        // difere, e refazer o ponto vai dar no mesmo. Gastar o
+                        // orçamento aí é o "laço de ressincronização" que o
+                        // jogador vê — meio minuto de recarregamentos para
+                        // terminar no mesmo lugar.
+                        //
+                        // É onde o Multiplayer acerta sem esforço: ele não
+                        // ressincroniza sozinho, então nunca insiste. Aqui a
+                        // insistência é escolha, e a escolha precisa de um
+                        // limite que não seja só contar tentativas.
+                        bool voltouRapido =
+                            sessao.PassoDoUltimoPonto >= 0 &&
+                            relato.Tick - sessao.PassoDoUltimoPonto <= PassosParaOPontoValer;
+
+                        if (!voltouRapido && sessao.Ressincronizacoes < RessincronizacoesPorSessao)
                             return Ressincronizar(sessao, relatorio);
 
                         return Abortar(sessao, MotivoFimDeSessao.Desync,
-                            $"Os dois lados divergiram {sessao.Ressincronizacoes + 1} vezes e " +
-                            $"refazer o ponto de junção não resolveu. " + relatorio + " " +
+                            (voltouRapido
+                                ? "A divergência voltou logo depois do ponto de junção: os dois " +
+                                  "lados partiram de um estado idêntico e se afastaram de novo. " +
+                                  "Refazer o ponto não resolve isto, então não vale insistir. "
+                                : $"Os dois lados divergiram {sessao.Ressincronizacoes + 1} vezes e " +
+                                  "refazer o ponto de junção não resolveu. ") + relatorio + " " +
                             "A colônia dos dois volta ao checkpoint pré-sessão — " +
                             "perde-se o encontro, nunca a colônia.\n" +
                             "Divergências desta sessão:\n  " +

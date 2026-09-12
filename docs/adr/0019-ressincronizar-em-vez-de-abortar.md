@@ -80,3 +80,31 @@ qualquer um para trás repetiria o erro que matava a construção pausada.
 - Delta em vez da partida inteira. É o que ligaria esta alavanca ao teto descrito
   em `PROGRESSO.md`: ressincronizar barato e com frequência **é** estado
   autoritativo.
+
+
+## O laço, e por que o Multiplayer não tem um
+
+**Ele não ressincroniza sozinho.** Ao detectar desync, para: `ClearSimulating()`,
+`session.desynced = true`, e abre uma janela com cinco botões. O "Try resync" é
+`Rejoiner.DoRejoin()` — `ClearAllMapsAndWorld()`, `Current.Game = null`, e rebaixa
+tudo do anfitrião. Manual, e mais pesado que o nosso.
+
+Então a ausência de laço lá não é recuperação melhor: é **não haver tentativa
+automática**. Ele para no primeiro desync e pergunta. O que faz parecer polido é
+outra coisa — desync é raro, por sete anos de guardas.
+
+Nosso laço é consequência de uma escolha deliberada: continuar jogando. O que
+faltava era um limite que não fosse só contar tentativas.
+
+### O limite que faltava
+
+Se a divergência volta **menos de 64 passos** depois do ponto de junção, os dois
+lados partiram de um estado idêntico e se afastaram de novo — é a simulação que
+difere, e refazer o ponto vai dar no mesmo. A sessão desiste ali, com o
+diagnóstico, em vez de gastar as cinco tentativas.
+
+64 passos são pouco mais de um segundo a 1×: tempo de sobra para uma divergência
+de **estado** aparecer, e curto demais para uma de **comportamento** esperar.
+
+O orçamento de cinco continua valendo para o outro caso — pontos que duram e
+depois divergem de novo, que é quando ressincronizar de fato ajuda.

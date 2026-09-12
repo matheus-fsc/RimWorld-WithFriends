@@ -722,6 +722,51 @@ public class SessaoTests
         Assert.InRange(voltou.TickLiberado, pedido.TickAlvo, pedido.TickAlvo + Sessao.FolgaDaBarreira);
     }
 
+    [Fact]
+    public void Ponto_de_juncao_que_nao_dura_nao_e_refeito_de_novo()
+    {
+        // O "laço de ressincronização" que o jogador vê. Se a divergência volta
+        // poucos passos depois do ponto, os dois lados partiram de um estado
+        // idêntico e se afastaram de novo: é a simulação que difere, e refazer
+        // o ponto vai dar no mesmo. Insistir é meio minuto de recarregamentos
+        // para terminar no mesmo lugar.
+        var inicio = AbrirSessao();
+        var t = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        broker.Barreira(Anfitriao, Digital(inicio.SessaoId, 100, "igual"), t);
+        broker.Barreira(Visitante, Digital(inicio.SessaoId, 100, "igual"), t);
+
+        IMessage? resposta = null;
+        void Divergir(long de)
+        {
+            for (int i = 1; i <= BrokerDeSessoes.DivergenciasParaAbortar; i++)
+            {
+                broker.Barreira(Anfitriao, Digital(inicio.SessaoId, de + i * 8, $"a{i}"), t);
+                resposta = broker.Barreira(Visitante, Digital(inicio.SessaoId, de + i * 8, $"b{i}"), t);
+            }
+        }
+
+        // Primeira divergência: ainda vale tentar, não há ponto anterior.
+        Divergir(100);
+        var pedido = Assert.IsType<SessaoRessincronizar>(resposta);
+
+        broker.Barreira(Anfitriao,
+            new SessaoBarreira { SessaoId = inicio.SessaoId, Tick = pedido.TickAlvo }, t);
+        broker.Barreira(Visitante,
+            new SessaoBarreira { SessaoId = inicio.SessaoId, Tick = pedido.TickAlvo }, t);
+
+        // Volta a divergir logo em seguida, dentro da janela em que o ponto
+        // ainda nem se provou: desiste em vez de gastar o orçamento.
+        Divergir(pedido.TickAlvo);
+
+        var aborto = Assert.IsType<SessaoAborto>(resposta);
+        Assert.Contains("voltou logo depois do ponto de junção", aborto.Explicacao);
+
+        // E desistiu com o orçamento quase intacto: o limite que valeu foi o de
+        // utilidade, não o de tentativas.
+        Assert.True(broker.PorId(inicio.SessaoId)!.Ressincronizacoes < BrokerDeSessoes.RessincronizacoesPorSessao);
+    }
+
     static SessaoBarreira Digital(string sessaoId, long tick, string digital) => new()
     {
         SessaoId = sessaoId,
