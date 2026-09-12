@@ -82,19 +82,47 @@ qualquer um para trás repetiria o erro que matava a construção pausada.
   autoritativo.
 
 
-## O laço, e por que o Multiplayer não tem um
+## O laço, e o que o Multiplayer faz que nós não fazíamos
 
-**Ele não ressincroniza sozinho.** Ao detectar desync, para: `ClearSimulating()`,
-`session.desynced = true`, e abre uma janela com cinco botões. O "Try resync" é
-`Rejoiner.DoRejoin()` — `ClearAllMapsAndWorld()`, `Current.Game = null`, e rebaixa
-tudo do anfitrião. Manual, e mais pesado que o nosso.
+**Correção de uma leitura anterior minha.** Eu tinha registrado aqui que ele não
+ressincroniza sozinho, olhando só a janela do cliente (`DesyncedWindow`, botão
+"Try resync" → `Rejoiner.DoRejoin`). Está errado: o resync automático dele é do
+**servidor**, e vem ligado por padrão.
 
-Então a ausência de laço lá não é recuperação melhor: é **não haver tentativa
-automática**. Ele para no primeiro desync e pergunta. O que faz parecer polido é
-outra coisa — desync é raro, por sete anos de guardas.
+```csharp
+public void OnDesync(ServerPlayer player, int tick, int diffAt)
+{
+    player.UpdateStatus(PlayerStatus.Desynced);
+    server.HostPlayer.SendPacket(ServerTracesPacket.Request(tick, diffAt, player.id));
+    player.ResetTimeVotes();
 
-Nosso laço é consequência de uma escolha deliberada: continuar jogando. O que
-faltava era um limite que não fosse só contar tentativas.
+    if (server.settings.pauseOnDesync)
+        server.commands.PauseAll();                          // ①
+
+    if (server.settings.autoJoinPoint.HasFlag(Desync))
+        server.worldData.TryStartJoinPointCreation(true);    // ②
+}
+
+// padrão: autoJoinPoint = Join | Desync
+```
+
+O desenho é o mesmo que o nosso — ponto de junção novo, decidido pelo servidor —
+com três coisas que faltavam aqui:
+
+| | |
+|---|---|
+| ① `pauseOnDesync` | **pausa todo mundo** antes de refazer o ponto |
+| ② debounce | `TryStartJoinPointCreation` recusa se já há um em andamento |
+| ③ `ResetTimeVotes` | quem dessincronizou para de votar no tempo |
+
+A primeira é a que importa para o laço, e é a que adotamos: voltávamos **na
+velocidade de antes**, então a simulação recomeçava a correr no mesmo instante.
+Se a causa era de comportamento, ela reaparecia em oito passos e o ciclo
+recomeçava. Pausado, o ponto de junção tem chance de valer alguma coisa: os dois
+veem o aviso, decidem quando retomar, e o que divergiu não roda de novo sozinho.
+
+O que continua verdade da leitura anterior: desync é raro no mod dele por sete
+anos de guardas, e é isso que faz o conjunto parecer polido.
 
 ### O limite que faltava
 

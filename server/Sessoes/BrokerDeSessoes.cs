@@ -551,6 +551,19 @@ public sealed class BrokerDeSessoes
         long alvo = sessao.UltimoTickValido;
         sessao.RecomecarEm(alvo);
 
+        // **Voltar pausado.**
+        //
+        // É o que o Multiplayer faz no servidor (`pauseOnDesync`, ligado por
+        // padrão) e o que faltava aqui. Voltávamos na velocidade de antes, e a
+        // simulação recomeçava a correr no mesmo instante — se a causa era de
+        // comportamento, ela reaparecia em oito passos e o ciclo recomeçava.
+        // Era metade do "laço de resync".
+        //
+        // Pausado, o ponto de junção tem chance de valer alguma coisa: os dois
+        // jogadores veem o aviso, decidem quando retomar, e o que quer que
+        // tenha divergido não roda de novo sozinho.
+        sessao.PedirVelocidade("servidor", VelocidadeDeSessao.Pausado, DateTime.UtcNow);
+
         Console.WriteLine(
             $"~~ sessão {sessao.Id}: ressincronizando ({sessao.Ressincronizacoes}/" +
             $"{RessincronizacoesPorSessao}) a partir do tick {alvo} — {relatorio}");

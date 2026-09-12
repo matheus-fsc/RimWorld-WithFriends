@@ -723,6 +723,34 @@ public class SessaoTests
     }
 
     [Fact]
+    public void A_visita_volta_pausada_do_ponto_de_juncao()
+    {
+        // `pauseOnDesync` do Multiplayer, que estava faltando aqui. Voltar na
+        // velocidade de antes fazia a simulação recomeçar a correr no mesmo
+        // instante — e uma causa de comportamento reaparecia em oito passos.
+        // Era metade do laço de resync.
+        var inicio = AbrirSessao();
+        var t = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        broker.Barreira(Anfitriao, new SessaoBarreira
+        {
+            SessaoId = inicio.SessaoId, Tick = 100,
+            Velocidade = VelocidadeDeSessao.Rapido, MudouVelocidade = true,
+        }, t);
+        Assert.Equal(VelocidadeDeSessao.Rapido, broker.PorId(inicio.SessaoId)!.Velocidade);
+
+        IMessage? resposta = null;
+        for (int i = 1; i <= BrokerDeSessoes.DivergenciasParaAbortar; i++)
+        {
+            broker.Barreira(Anfitriao, Digital(inicio.SessaoId, 100 + i * 8, $"a{i}"), t);
+            resposta = broker.Barreira(Visitante, Digital(inicio.SessaoId, 100 + i * 8, $"b{i}"), t);
+        }
+
+        Assert.IsType<SessaoRessincronizar>(resposta);
+        Assert.Equal(VelocidadeDeSessao.Pausado, broker.PorId(inicio.SessaoId)!.Velocidade);
+    }
+
+    [Fact]
     public void Ponto_de_juncao_que_nao_dura_nao_e_refeito_de_novo()
     {
         // O "laço de ressincronização" que o jogador vê. Se a divergência volta
