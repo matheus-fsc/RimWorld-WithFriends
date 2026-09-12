@@ -542,6 +542,19 @@ public sealed class SessaoCliente
         RastreioDeRng.Despejar(pedido.TickAlvo);
         RastreioDePawns.Despejar();
 
+        // **Esvaziar os rastreios antes de recarregar.**
+        //
+        // O que eles guardavam já foi para o diário — daqui em diante é só peso.
+        // E o recarregamento é o pico de memória do mod: duas partidas vivas ao
+        // mesmo tempo, a que sai e a que entra. Foi exatamente aí que o anfitrião
+        // começou a estourar quando aumentei o anel de locais.
+        //
+        // Também é correção de conteúdo, não só de memória: os rastreios do lado
+        // de cá da troca de partida descrevem um estado que deixou de existir, e
+        // misturá-los com os do estado novo confundiria a próxima comparação.
+        RastreioDeRng.Limpar();
+        RastreioDePawns.Limpar();
+
         // O visitante não faz nada aqui: ele espera a partida chegar, e
         // `PartidaRecebida` cuida do resto — a mesma porta do bootstrap.
         if (VisitaEmAndamento.SouVisitante) return;

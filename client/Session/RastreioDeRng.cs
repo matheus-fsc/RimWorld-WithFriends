@@ -43,11 +43,18 @@ public static class RastreioDeRng
     /// anel precisa cobrir essa distância com folga, e agora cobre a mesma que o
     /// histórico.</para>
     ///
-    /// <para>Custa memória — dezenas de MB com muitos locais distintos. Durante o
-    /// diagnóstico isso é troca boa: sem o anel largo, cada divergência custa uma
-    /// reprodução a mais.</para>
+    /// <para><b>Por que não 4.000, como o histórico.</b> Tentei, e o anfitrião
+    /// passou a estourar no meio do recarregamento da ressincronização — o
+    /// momento de maior pressão de memória do mod, com duas partidas vivas ao
+    /// mesmo tempo. O histórico guarda dois números por tick; este guarda um
+    /// dicionário de locais por tick, e dez vezes mais ticks é outra ordem de
+    /// grandeza.</para>
+    ///
+    /// <para>1.200 cobre com folga a distância entre a causa e a detecção — três
+    /// amostras de digital sem bater, de oito em oito, mais o trânsito — que é o
+    /// que faltava quando eram 400.</para>
     /// </summary>
-    const int TicksGuardados = 4000;
+    const int TicksGuardados = 1200;
 
     /// <summary>
     /// Quadros de pilha que identificam um local de chamada.
