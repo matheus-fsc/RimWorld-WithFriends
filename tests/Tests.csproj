@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>WithFriends.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.6.0" />
+    <PackageReference Include="xunit" Version="2.4.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- O servidor é testável sem o jogo (§10) — essa é a consequência boa
+         de ele nunca referenciar assembly do RimWorld. -->
+    <!--
+      A regra do auditor é C# puro e precisa de teste; o varredor depende do
+      RimWorld (net48) e não pode ser referenciado daqui (net6.0). Compilar o
+      arquivo da regra junto mantém os dois no lugar certo.
+    -->
+    <Compile Include="..\client\Auditoria\FontesLocais.cs" Link="Auditoria\FontesLocais.cs" />
+    <ProjectReference Include="..\protocol\Protocol.csproj" />
+    <ProjectReference Include="..\server\Server.csproj" />
+    <ProjectReference Include="..\transport\Transport.csproj" />
+  </ItemGroup>
+
+</Project>

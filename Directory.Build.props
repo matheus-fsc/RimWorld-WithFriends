@@ -1,0 +1,11 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>10</LangVersion> <!-- teto do SDK .NET 6 local -->
+    <Nullable>enable</Nullable>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <!-- Versão do RimWorld alvo. Casa com a instalação em referencia/jogo/. -->
+    <RimWorldRefVersion>1.6.4871</RimWorldRefVersion>
+  </PropertyGroup>
+</Project>

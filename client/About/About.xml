@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ModMetaData>
+  <packageId>withfriends.rimworld</packageId>
+  <name>With Friends</name>
+  <author>math</author>
+  <supportedVersions>
+    <li>1.6</li>
+  </supportedVersions>
+  <description>Multiplayer assíncrono: cada jogador simula a própria colônia no próprio ritmo, com sessões síncronas curtas para os encontros.
+
+Reusa mecanismos de Multiplayer (MIT, Zetrith) — em especial detecção de desync por estado de RNG e a abstração de tempo por tickable. Não é um fork.</description>
+  <modDependencies>
+    <li>
+      <packageId>brrainz.harmony</packageId>
+      <displayName>Harmony</displayName>
+      <steamWorkshopUrl>steam://url/CommunityFilePage/2009463077</steamWorkshopUrl>
+    </li>
+  </modDependencies>
+  <loadAfter>
+    <li>brrainz.harmony</li>
+    <li>Ludeon.RimWorld</li>
+  </loadAfter>
+</ModMetaData>

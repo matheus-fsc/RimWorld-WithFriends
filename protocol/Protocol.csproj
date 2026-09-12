@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- netstandard2.0: consumido pelo cliente (net48, dentro do jogo)
+         e pelo servidor (net6.0). Fonte única de verdade — §12. -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>WithFriends.Protocol</RootNamespace>
+    <AssemblyName>WithFriends.Protocol</AssemblyName>
+  </PropertyGroup>
+
+</Project>

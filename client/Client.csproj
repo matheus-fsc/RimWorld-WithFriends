@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- net48: é o runtime que o RimWorld carrega. O mod roda dentro do jogo. -->
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>WithFriends.Client</RootNamespace>
+    <AssemblyName>WithFriends</AssemblyName>
+    <!-- netstandard2.0 (protocol) é consumível por net48, mas o resolvedor
+         precisa saber disso sem a targeting pack instalada. -->
+    <NoWarn>$(NoWarn);NU1701</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Assemblies de referência do RimWorld, casadas com a versão instalada
+         (ver REFERENCIAS.md). Traz também as system assemblies, por isso o
+         alvo RemoveFramework abaixo: não há targeting pack net48 no Linux. -->
+    <PackageReference Include="Krafs.Rimworld.Ref" Version="$(RimWorldRefVersion)" />
+    <!-- Harmony vem do mod brrainz.harmony em runtime; nunca redistribuir. -->
+    <PackageReference Include="Lib.Harmony" Version="2.4.2" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\protocol\Protocol.csproj" />
+    <ProjectReference Include="..\transport\Transport.csproj" />
+  </ItemGroup>
+
+  <Target Name="RemoveFramework" BeforeTargets="PrepareForBuild" DependsOnTargets="GetReferenceAssemblyPaths">
+    <PropertyGroup>
+      <TargetFrameworkDirectory></TargetFrameworkDirectory>
+    </PropertyGroup>
+  </Target>
+
+  <!-- Empacota no layout que o RimWorld espera: dist/WithFriends/{About,Assemblies}.
+       Ligar em Mods/ com: ln -s <repo>/dist/WithFriends ~/.steam/.../RimWorld/Mods/ -->
+  <PropertyGroup>
+    <ModStagingDir>$(MSBuildThisFileDirectory)..\dist\WithFriends\</ModStagingDir>
+  </PropertyGroup>
+
+  <Target Name="StageMod" AfterTargets="Build">
+    <ItemGroup>
+      <StagedAssemblies Include="$(TargetDir)WithFriends.dll;$(TargetDir)WithFriends.Protocol.dll;$(TargetDir)WithFriends.Transport.dll" />
+      <StagedAbout Include="$(MSBuildThisFileDirectory)About\**\*" />
+      <StagedDefs Include="$(MSBuildThisFileDirectory)Defs\**\*" />
+    </ItemGroup>
+    <!--
+      Publicar o assembly de forma ATÔMICA.
+
+      Copiar direto para dentro de Assemblies/ deixa uma janela em que o arquivo
+      existe pela metade. Se o jogo subir nesse instante, ele lê metadata
+      truncada e o sintoma não parece build: parece bug de mod —
+
+        Could not instantiate a GameComponent of type View.GetSelectionWeight
+        System.BadImageFormatException: Method has zero rva
+
+      Aconteceu de verdade, com o jogo aberto durante um `dotnet build`.
+      Escrever ao lado e renomear fecha a janela: `Move` no mesmo sistema de
+      arquivos é atômico, então o jogo vê o arquivo antigo ou o novo, nunca um
+      pedaço.
+    -->
+    <Copy SourceFiles="@(StagedAssemblies)"
+          DestinationFiles="@(StagedAssemblies->'$(ModStagingDir)Assemblies\%(Filename)%(Extension).novo')" />
+    <Move SourceFiles="@(StagedAssemblies->'$(ModStagingDir)Assemblies\%(Filename)%(Extension).novo')"
+          DestinationFiles="@(StagedAssemblies->'$(ModStagingDir)Assemblies\%(Filename)%(Extension)')" />
+    <Copy SourceFiles="@(StagedAbout)" DestinationFolder="$(ModStagingDir)About\%(RecursiveDir)" />
+    <Copy SourceFiles="@(StagedDefs)" DestinationFolder="$(ModStagingDir)Defs\%(RecursiveDir)" />
+  </Target>
+
+</Project>

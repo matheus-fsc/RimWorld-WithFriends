@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Auditoria de fontes locais sem abrir o jogo.
+
+    A debug action in-game usa Harmony e enxerga o assembly realmente carregado,
+    com outros mods. Esta aqui lê o DLL direto com Mono.Cecil: não precisa do
+    jogo aberto, roda em segundos e serve para trabalhar.
+
+    A REGRA é a mesma nos dois — o arquivo é compilado aqui e lá.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net6.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <AssemblyName>WithFriends.Auditor</AssemblyName>
+    <RootNamespace>WithFriends.Auditor</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mono.Cecil" Version="0.11.4" />
+    <Compile Include="..\..\client\Auditoria\FontesLocais.cs" Link="FontesLocais.cs" />
+  </ItemGroup>
+
+</Project>

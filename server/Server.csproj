@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Coordenador, não simulador (§10): nunca referencia assembly do RimWorld. -->
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net6.0</TargetFramework>
+    <RootNamespace>WithFriends.Server</RootNamespace>
+    <AssemblyName>WithFriends.Server</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Sem apphost: o executável nativo em execução trava o próprio build
+         ("Text file busy"). Rodar via `dotnet WithFriends.Server.dll` deixa
+         compilar com o coordenador no ar. -->
+    <UseAppHost>false</UseAppHost>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\protocol\Protocol.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>WithFriends.Tools.ClienteFalso</RootNamespace>
+    <AssemblyName>WithFriends.ClienteFalso</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\protocol\Protocol.csproj" />
+    <ProjectReference Include="..\..\transport\Transport.csproj" />
+  </ItemGroup>
+
+</Project>

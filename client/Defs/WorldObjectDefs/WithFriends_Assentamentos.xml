@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- Assentamento de outro jogador visto no mapa-mundo.
+       §4: sem presença física, só nome, riqueza estimada e status online. -->
+  <WorldObjectDef ParentName="StaticWorldObjectBase">
+    <defName>WithFriends_AssentamentoRemoto</defName>
+    <label>assentamento de jogador</label>
+    <description>A colônia de outro jogador. Para ver o que há dentro, é preciso chegar lá.</description>
+    <worldObjectClass>WithFriends.Client.World.AssentamentoRemoto</worldObjectClass>
+    <texture>World/WorldObjects/TribalSettlement</texture>
+    <expandingIcon>true</expandingIcon>
+    <expandingIconPriority>9</expandingIconPriority>
+    <canHaveMap>false</canHaveMap>
+    <selectable>true</selectable>
+  </WorldObjectDef>
+
+</Defs>

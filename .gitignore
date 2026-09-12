@@ -1,0 +1,28 @@
+# Referências de leitura (assemblies do jogo + clones de terceiros) — nunca versionado
+referencia/
+
+# Build .NET
+bin/
+obj/
+*.user
+*.suo
+artifacts/
+
+# Saída de decompilação
+decompilado/
+
+# Editores / SO
+.vs/
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Staging do mod (saída de build)
+dist/
+
+# Dados do coordenador em execução local
+dados/
+
+# Log do coordenador em execução local
+dados-servidor.log

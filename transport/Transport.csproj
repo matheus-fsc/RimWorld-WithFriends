@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- netstandard2.0: usado pelo cliente (net48, dentro do jogo), pelas
+         ferramentas e pelos testes (net6.0). O servidor tem o próprio
+         listener e não depende daqui. -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>WithFriends.Transport</RootNamespace>
+    <AssemblyName>WithFriends.Transport</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\protocol\Protocol.csproj" />
+  </ItemGroup>
+
+</Project>
