@@ -25,6 +25,12 @@ public class WithFriendsSettings : ModSettings
     /// <summary>Piso entre dois envios automáticos, em minutos.</summary>
     public int intervaloMinimoMinutos = 5;
 
+    /// <summary>Save que o árbitro abre. Precisa ser do mesmo planeta (docs/ARBITRO.md).</summary>
+    public string arbitroSave = "";
+
+    /// <summary>Pasta de dados do árbitro — a mesma que `tools/dois-jogos.sh` usa.</summary>
+    public string arbitroPastaDeDados = "";
+
     public string PlayerIdOuNovo()
     {
         if (string.IsNullOrEmpty(playerId))
@@ -43,5 +49,7 @@ public class WithFriendsSettings : ModSettings
         Scribe_Values.Look(ref conectarAoIniciar, "conectarAoIniciar", true);
         Scribe_Values.Look(ref checkpointAoSalvar, "checkpointAoSalvar", true);
         Scribe_Values.Look(ref intervaloMinimoMinutos, "intervaloMinimoMinutos", 5);
+        Scribe_Values.Look(ref arbitroSave, "arbitroSave", "");
+        Scribe_Values.Look(ref arbitroPastaDeDados, "arbitroPastaDeDados", "");
     }
 }

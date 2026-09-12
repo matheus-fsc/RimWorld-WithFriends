@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using RimWorld;
 using UnityEngine;
+using System.Linq;
 using Verse;
 using WithFriends.Client.Net;
 using WithFriends.Client.World;
@@ -84,6 +85,13 @@ public class SincronizacaoComponent : GameComponent
         var cliente = WithFriendsMod.Cliente;
 
         TentarConectarSozinho(cliente);
+
+        // O anfitrião esperando o árbitro subir para convidá-lo. Inerte quando
+        // ninguém pediu — ver ModoArbitro.Lancar.
+        Session.ModoArbitro.AcompanharSubida(
+            convidar: DebugActions.ConvidarParaVisita,
+            alguemMaisOnline: () =>
+                Online.Keys.Any(id => id != WithFriendsMod.Settings.PlayerIdOuNovo()));
 
         while (cliente.TentarReceber(out var envelope))
             Processar(envelope);

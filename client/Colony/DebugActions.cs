@@ -356,6 +356,18 @@ public static class DebugActions
         allowedGameStates = AllowedGameStates.PlayingOnMap)]
     public static void ConvidarParaVisita() => Convidar(Protocol.Messages.TipoSessao.Visitar);
 
+    /// <summary>
+    /// Lança o árbitro e convida sozinho quando ele aparecer.
+    ///
+    /// <para>Duas ações em uma porque a ordem importa e é fácil errar: convite
+    /// exige o outro <b>online</b> (§11), então não dá para convidar e lançar ao
+    /// mesmo tempo. Lançar, esperar, convidar — e o esperar leva uns segundos
+    /// porque ele carrega uma colônia.</para>
+    /// </summary>
+    [DebugAction("WithFriends", "Convidar o árbitro (lança a instância)",
+        allowedGameStates = AllowedGameStates.PlayingOnMap)]
+    public static void ConvidarOArbitro() => Session.ModoArbitro.Lancar();
+
     [DebugAction("WithFriends", "Aceitar convite de sessão",
         allowedGameStates = AllowedGameStates.PlayingOnMap)]
     public static void AceitarConvite() => Sessao?.Aceitar();

@@ -130,6 +130,14 @@ public class WithFriendsMod : Mod
             ref Settings.conectarAoIniciar,
             "Tenta a cada 15s enquanto não conseguir. Jogar sozinho nunca depende disso.");
 
+        lista.GapLine();
+        lista.Label("Árbitro (docs/ARBITRO.md) — instância sem interface, para diagnóstico");
+        lista.Label("  Save que ele abre (mesmo planeta do anfitrião):");
+        Settings.arbitroSave = lista.TextEntry(Settings.arbitroSave);
+        lista.Label("  Pasta de dados dele (vazio = ~/.rimworld-arbitro):");
+        Settings.arbitroPastaDeDados = lista.TextEntry(Settings.arbitroPastaDeDados);
+        lista.GapLine();
+
         lista.CheckboxLabeled(
             "Enviar checkpoint junto com todo save do jogo",
             ref Settings.checkpointAoSalvar,

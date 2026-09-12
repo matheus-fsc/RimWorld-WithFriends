@@ -50,6 +50,22 @@ comparar simulações, e não jogar, isso não custa nada.
 
 ## Como rodar
 
+### De dentro do jogo (o caminho normal)
+
+Opções do mod → **Save do árbitro** (e a pasta de dados dele, se quiser outra).
+Depois, na visita, a debug action **"Convidar o árbitro (lança a instância)"**.
+
+Ela faz as três coisas na ordem certa: lança a instância, espera ela aparecer
+online, e convida. A ordem importa — convite exige o outro **já online** (§11),
+então não dá para convidar e lançar ao mesmo tempo. A espera leva alguns
+segundos porque ele carrega uma colônia.
+
+O executável usado é o **desta** instância: mesmo binário, mesmos mods, mesma
+versão. Qualquer outra coisa seria comparar simulações diferentes, que é o oposto
+do que o árbitro serve para fazer.
+
+### Pelo script (quando se quer tudo do zero)
+
 ```
 tools/dois-jogos.sh --servidor --arbitro NomeDoSave
 ```

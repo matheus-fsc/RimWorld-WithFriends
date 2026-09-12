@@ -2,6 +2,7 @@
 // rwmt/Multiplayer, MIT, Copyright (c) 2018 Zetrith.
 // Ver THIRD_PARTY/Multiplayer-MIT.txt
 
+using System;
 using HarmonyLib;
 using RimWorld;
 using UnityEngine;
@@ -74,6 +75,122 @@ public static class ModoArbitro
         Log.Message(
             "[WithFriends] modo árbitro: esta instância simula e não desenha. " +
             "Ela entra na visita como visitante e só compara digitais.");
+    }
+
+    /// <summary>
+    /// O anfitrião esperando o árbitro aparecer para convidá-lo.
+    ///
+    /// <para>Não dá para convidar e lançar ao mesmo tempo: o convite exige o
+    /// outro <b>online</b> (§11, sessão exige os dois presentes). Então a ordem
+    /// é lançar, esperar aparecer, e só então convidar.</para>
+    /// </summary>
+    public static bool Esperando { get; private set; }
+
+    static float desistirEm;
+
+    /// <summary>Quanto se espera o árbitro subir. Carregar uma colônia leva uns segundos.</summary>
+    const float SegundosParaSubir = 90f;
+
+    /// <summary>
+    /// Lança a instância do árbitro e passa a esperar por ela.
+    ///
+    /// <para>O executável é o <b>desta</b> instância — mesmo binário, mesmos
+    /// mods, mesma versão. Qualquer outra coisa seria comparar simulações
+    /// diferentes, que é o oposto do que o árbitro serve para fazer.</para>
+    /// </summary>
+    public static bool Lancar()
+    {
+        if (Ativo)
+        {
+            Log.Warning("[WithFriends] um árbitro não lança outro árbitro.");
+            return false;
+        }
+
+        var cfg = WithFriendsMod.Settings;
+        if (string.IsNullOrWhiteSpace(cfg.arbitroSave))
+        {
+            Log.Error(
+                "[WithFriends] não há save de árbitro configurado. " +
+                "Opções do mod → \"Save do árbitro\" (docs/ARBITRO.md).");
+            return false;
+        }
+
+        string executavel;
+        try
+        {
+            executavel = System.Diagnostics.Process.GetCurrentProcess().MainModule!.FileName;
+        }
+        catch (Exception e)
+        {
+            Log.Error($"[WithFriends] não consegui descobrir o executável do jogo: {e.Message}");
+            return false;
+        }
+
+        string pasta = string.IsNullOrWhiteSpace(cfg.arbitroPastaDeDados)
+            ? System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".rimworld-arbitro")
+            : cfg.arbitroPastaDeDados;
+
+        // Log próprio: o Unity escreve Player.log num caminho fixo que **não**
+        // acompanha o -savedatafolder, e sem isto o árbitro apagaria o log do
+        // anfitrião — justamente o que se quer ler depois.
+        string log = System.IO.Path.Combine(pasta, "Player.log");
+        System.IO.Directory.CreateDirectory(pasta);
+
+        string argumentos =
+            $"-batchmode -nographics -arbitro -arbitrosave=\"{cfg.arbitroSave}\" " +
+            $"-savedatafolder=\"{pasta}\" -logFile \"{log}\"";
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = executavel,
+                Arguments = argumentos,
+                UseShellExecute = false,
+            });
+        }
+        catch (Exception e)
+        {
+            Log.Error($"[WithFriends] não consegui lançar o árbitro: {e.Message}");
+            return false;
+        }
+
+        Esperando = true;
+        desistirEm = Time.realtimeSinceStartup + SegundosParaSubir;
+
+        Log.Message(
+            $"[WithFriends] árbitro lançado (save \"{cfg.arbitroSave}\", pasta {pasta}). " +
+            "Convido assim que ele aparecer online.");
+        Messages.Message(
+            "With Friends: árbitro subindo… o convite sai sozinho quando ele entrar.",
+            MessageTypeDefOf.NeutralEvent, historical: false);
+        return true;
+    }
+
+    /// <summary>
+    /// Chamado a cada quadro pelo componente de sincronização: convida assim que
+    /// o árbitro aparecer, ou desiste se ele não subir.
+    /// </summary>
+    public static void AcompanharSubida(Action convidar, Func<bool> alguemMaisOnline)
+    {
+        if (!Esperando) return;
+
+        if (alguemMaisOnline())
+        {
+            Esperando = false;
+            Log.Message("[WithFriends] árbitro online — convidando.");
+            convidar();
+            return;
+        }
+
+        if (Time.realtimeSinceStartup < desistirEm) return;
+
+        Esperando = false;
+        Log.Error(
+            "[WithFriends] o árbitro não apareceu online a tempo. " +
+            "Veja o Player.log da pasta dele: save inexistente e planeta divergente " +
+            "são as duas causas comuns.");
     }
 }
 
