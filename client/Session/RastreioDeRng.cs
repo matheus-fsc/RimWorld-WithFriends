@@ -239,7 +239,19 @@ public static class RastreioDeRng
     /// na frente. A linha que só existe de um lado — ou que tem número
     /// diferente — é a causa.
     /// </summary>
-    public static void Despejar(long tickDoAborto, int ticksAntes = TicksGuardados, int ticksDepois = 8)
+    /// <summary>
+    /// <paramref name="ticksDepois"/> precisa passar da **detecção**, não do
+    /// rollback.
+    ///
+    /// <para>Eram 8, e isso cortava justamente a região que interessa. O tick do
+    /// aborto é o último ponto <b>consistente</b>; a divergência nasce depois
+    /// dele e só é detectada mais tarde ainda — três amostras seguidas sem
+    /// bater, de oito em oito ticks, mais o tempo de a mensagem chegar. Numa
+    /// divergência real medida, o último válido foi 5408, a causa apareceu no
+    /// 5470 e a detecção no 5536: a janela terminava no 5416 e não mostrava
+    /// nada. O anel guarda esses ticks — só não os imprimia.</para>
+    /// </summary>
+    public static void Despejar(long tickDoAborto, int ticksAntes = TicksGuardados, int ticksDepois = 200)
     {
         if (porTick.Count == 0)
         {

@@ -34,6 +34,17 @@ public sealed class BrokerDeSessoes
     /// </summary>
     public const int DivergenciasParaAbortar = 3;
 
+    /// <summary>
+    /// Quantas vezes uma sessão pode refazer o ponto de junção antes de o
+    /// aborto voltar a ser a resposta.
+    ///
+    /// <para>Cinco é folgado de propósito. O objetivo é **continuar jogando** e
+    /// colher várias divergências por visita em vez de uma; o teto existe só
+    /// para o caso em que a causa reaparece imediatamente e a visita vira uma
+    /// sequência de recarregamentos.</para>
+    /// </summary>
+    public const int RessincronizacoesPorSessao = 5;
+
     readonly object trava = new();
     readonly Dictionary<string, Convite> convites = new();
     readonly Dictionary<string, Sessao> sessoes = new();
@@ -48,9 +59,22 @@ public sealed class BrokerDeSessoes
         this.novoId = novoId ?? (() => Guid.NewGuid().ToString("N")[..12]);
     }
 
+    /// <summary>
+    /// As sessões vivas — inclusive as que estão refazendo o ponto de junção.
+    ///
+    /// <para>Ressincronizando é um estado <b>vivo</b>: a visita continua, os dois
+    /// lados só estão recarregando. Contá-la como morta faria o resto do
+    /// coordenador tratar a visita como encerrada bem no meio do conserto.</para>
+    /// </summary>
     public IReadOnlyCollection<Sessao> Ativas
     {
-        get { lock (trava) return sessoes.Values.Where(s => s.Estado == EstadoSessao.Ativa).ToArray(); }
+        get
+        {
+            lock (trava)
+                return sessoes.Values
+                    .Where(s => s.Estado is EstadoSessao.Ativa or EstadoSessao.Ressincronizando)
+                    .ToArray();
+        }
     }
 
     public Sessao? PorId(string sessaoId)
@@ -182,9 +206,19 @@ public sealed class BrokerDeSessoes
         recusa = null;
         lock (trava)
         {
-            if (!sessoes.TryGetValue(proposta.SessaoId, out var sessao) ||
-                sessao.Estado != EstadoSessao.Ativa || !sessao.Tem(autor))
+            if (!sessoes.TryGetValue(proposta.SessaoId, out var sessao) || !sessao.Tem(autor))
                 return null;
+
+            // Ressincronizando, o passo contra o qual carimbar ainda não existe:
+            // os dois lados estão voltando para um estado que está viajando.
+            // Recusar com motivo é melhor que carimbar contra o passo velho.
+            if (sessao.Estado == EstadoSessao.Ressincronizando)
+            {
+                recusa = "A visita está se ressincronizando. Tente de novo em um instante.";
+                return null;
+            }
+
+            if (sessao.Estado != EstadoSessao.Ativa) return null;
 
             // Decisão de colônia é de quem mora nela (§4). Recusar aqui, antes
             // de carimbar, é o que garante que ninguém aplique metade: o
@@ -221,9 +255,13 @@ public sealed class BrokerDeSessoes
     {
         lock (trava)
         {
-            if (!sessoes.TryGetValue(relato.SessaoId, out var sessao) ||
-                sessao.Estado != EstadoSessao.Ativa || !sessao.Tem(autor))
+            if (!sessoes.TryGetValue(relato.SessaoId, out var sessao) || !sessao.Tem(autor))
                 return null;
+
+            if (sessao.Estado == EstadoSessao.Ressincronizando)
+                return RelatoDurantePonto(sessao, autor, relato);
+
+            if (sessao.Estado != EstadoSessao.Ativa) return null;
 
             sessao.TickPorParticipante[autor] = relato.Tick;
 
@@ -288,14 +326,31 @@ public sealed class BrokerDeSessoes
                             };
                         }
 
-                        return Abortar(sessao, MotivoFimDeSessao.Desync,
-                            $"Os dois lados divergiram e não voltaram a bater. " +
+                        string relatorio =
                             $"Ticks suspeitos: {string.Join(", ", sessao.TicksSuspeitos)}. " +
                             $"No tick {relato.Tick}, {autor} calculou {relato.Fingerprint} e " +
                             $"{outro} calculou {doOutro}. " +
-                            $"A sessão foi abortada no último ponto consistente ({sessao.UltimoTickValido}). " +
+                            $"Último ponto consistente: {sessao.UltimoTickValido}.";
+
+                        sessao.RelatoriosDeDivergencia.Add(relatorio);
+
+                        // **Ressincronizar em vez de abortar.**
+                        //
+                        // Abortar transformava toda causa desconhecida em "perdeu
+                        // o encontro" — e causa desconhecida só aparece jogando.
+                        // Refazendo o ponto de junção, uma visita rende vários
+                        // relatórios em vez de um, e as causas restantes aparecem
+                        // em lote.
+                        if (sessao.Ressincronizacoes < RessincronizacoesPorSessao)
+                            return Ressincronizar(sessao, relatorio);
+
+                        return Abortar(sessao, MotivoFimDeSessao.Desync,
+                            $"Os dois lados divergiram {sessao.Ressincronizacoes + 1} vezes e " +
+                            $"refazer o ponto de junção não resolveu. " + relatorio + " " +
                             "A colônia dos dois volta ao checkpoint pré-sessão — " +
-                            "perde-se o encontro, nunca a colônia.");
+                            "perde-se o encontro, nunca a colônia.\n" +
+                            "Divergências desta sessão:\n  " +
+                            string.Join("\n  ", sessao.RelatoriosDeDivergencia));
                     }
 
                     // Bateu: o que estava divergindo se resolveu.
@@ -356,6 +411,86 @@ public sealed class BrokerDeSessoes
                 Explicacao = $"{playerId} desconectou. A sessão terminou no tick {sessao.UltimoTickValido}.",
             };
         }
+    }
+
+    /// <summary>
+    /// Relato que chega enquanto os dois refazem o ponto de junção.
+    ///
+    /// <para>Quem já chegou no tick novo fica registrado; quem ainda não chegou
+    /// recebe o pedido de novo — a mensagem é idempotente de propósito, para que
+    /// um lado que a perdeu no meio de um recarregamento não deixe a sessão
+    /// pendurada para sempre.</para>
+    ///
+    /// <para>Com os dois no tick novo, a visita volta a andar. Nada de digital
+    /// aqui: as digitais do passo velho já foram apagadas, e comparar contra
+    /// elas acusaria divergência na hora.</para>
+    /// </summary>
+    IMessage RelatoDurantePonto(Sessao sessao, string autor, SessaoBarreira relato)
+    {
+        long alvo = sessao.UltimoTickValido;
+
+        if (relato.Tick >= alvo)
+            sessao.TickPorParticipante[autor] = relato.Tick;
+
+        bool osDoisChegaram = sessao.TickPorParticipante.Count >= 2;
+        if (!osDoisChegaram)
+        {
+            return new SessaoRessincronizar
+            {
+                SessaoId = sessao.Id,
+                Explicacao = "aguardando o outro lado terminar de recarregar",
+                TickAlvo = alvo,
+                Numero = sessao.Ressincronizacoes,
+            };
+        }
+
+        sessao.Estado = EstadoSessao.Ativa;
+        Console.WriteLine(
+            $"~~ sessão {sessao.Id}: ponto de junção refeito no tick {alvo} — a visita continua");
+
+        return new SessaoBarreira
+        {
+            SessaoId = sessao.Id,
+            Autor = "servidor",
+            Tick = relato.Tick,
+            TickLiberado = sessao.TickLiberado(),
+            TodosPausados = sessao.TodosPausados(),
+            VelocidadeAcordada = sessao.Velocidade,
+            QuemMudou = sessao.QuemMudouOTempo,
+            VersaoDoTempo = sessao.VersaoDoTempo,
+            VelocidadeDesdePasso = sessao.VelocidadeDesdePasso,
+            Pausado = sessao.Pausados.Count > 0,
+        };
+    }
+
+    /// <summary>
+    /// Manda os dois lados refazerem o ponto de junção e congela a barreira até
+    /// eles voltarem.
+    ///
+    /// <para>Enquanto a sessão está <see cref="EstadoSessao.Ressincronizando"/>,
+    /// nada é liberado e nenhum comando é carimbado: o estado para o qual os
+    /// dois vão voltar ainda está viajando, e carimbar contra o passo antigo
+    /// produziria comando para um tick que deixou de existir.</para>
+    /// </summary>
+    SessaoRessincronizar Ressincronizar(Sessao sessao, string relatorio)
+    {
+        sessao.Ressincronizacoes++;
+        sessao.Estado = EstadoSessao.Ressincronizando;
+
+        long alvo = sessao.UltimoTickValido;
+        sessao.RecomecarEm(alvo);
+
+        Console.WriteLine(
+            $"~~ sessão {sessao.Id}: ressincronizando ({sessao.Ressincronizacoes}/" +
+            $"{RessincronizacoesPorSessao}) a partir do tick {alvo} — {relatorio}");
+
+        return new SessaoRessincronizar
+        {
+            SessaoId = sessao.Id,
+            Explicacao = relatorio,
+            TickAlvo = alvo,
+            Numero = sessao.Ressincronizacoes,
+        };
     }
 
     SessaoAborto Abortar(Sessao sessao, MotivoFimDeSessao motivo, string explicacao)

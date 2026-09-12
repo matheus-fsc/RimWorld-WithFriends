@@ -49,6 +49,57 @@ public enum TipoDeComando : byte
     /// estava engasgando ou perdendo ordens.</para>
     /// </summary>
     DesignarVarias = 6,
+
+    /// <summary>
+    /// "Priorizar este trabalho" — o clique direito que manda um pawn fazer
+    /// **agora** o que ele faria depois.
+    ///
+    /// <para>Parece a mesma coisa que <see cref="OrdemDeTrabalho"/>, e por fora
+    /// é: <c>TryTakeOrderedJobPrioritizedWork</c> chama
+    /// <c>TryTakeOrderedJob</c> por dentro. Mas o que vem **depois** dessa
+    /// chamada não é ordem nenhuma — é o chamador escrevendo em
+    /// <c>job.workGiverDef</c> e em <c>pawn.mindState.priorityWork</c>.</para>
+    ///
+    /// <para>Com só a chamada de dentro interceptada, a nossa recusa devolvia
+    /// "aceito", o chamador escrevia essas duas coisas no lado de quem clicou, e
+    /// mais nada acontecia no outro. Divergência silenciosa a partir do próximo
+    /// tick — o pior tipo, porque nada dá erro.</para>
+    /// </summary>
+    OrdemPriorizada = 7,
+
+    /// <summary>
+    /// Uma chave liga/desliga do jogador: segurar fogo, proibir um item.
+    ///
+    /// <para>Genérico de propósito. Cada um desses é uma propriedade
+    /// <c>bool</c> com dono conhecido, e o Multiplayer registra uma linha por
+    /// propriedade (<c>Pawn_DraftController.FireAtWill</c>,
+    /// <c>CompForbiddable.Forbidden</c>, …). Em vez de um tipo de comando por
+    /// linha dessas, um tipo só com uma chave: quem sabe o que a chave
+    /// significa é o registro em <c>AlternaveisDeSessao</c>, e acrescentar o
+    /// próximo custa uma linha, sem mexer no protocolo.</para>
+    /// </summary>
+    Alternar = 8,
+
+    /// <summary>
+    /// A configuração de um estoque: prioridade e filtro, inteiros.
+    ///
+    /// <para><b>Estado, não operação.</b> O <c>ThingFilter</c> tem oito
+    /// mutadores (<c>SetAllow</c> em quatro sabores, <c>SetAllowAll</c>,
+    /// <c>SetDisallowAll</c>, <c>SetFromPreset</c>, <c>CopyAllowancesFrom</c>),
+    /// vários com parâmetros que não atravessam rede de graça — listas de
+    /// exceções, um filtro-pai inteiro. O Multiplayer sincroniza a interação com
+    /// o widget e precisa de marcadores de contexto para saber de quem é o
+    /// filtro que está sendo mexido.</para>
+    ///
+    /// <para>Aqui viaja o **resultado**: quais defs estão permitidas agora, mais
+    /// as faixas. Um payload cobre os oito mutadores, os widgets que ainda não
+    /// existem e os que vêm de mod — e, por ser estado absoluto, dois comandos
+    /// fora de ordem não deixam o filtro num meio-termo que ninguém pediu.</para>
+    ///
+    /// <para>Custa mais bytes: "permitir tudo" são umas centenas de nomes de
+    /// def. É comando raro e de jogador, não de tick.</para>
+    /// </summary>
+    Estoque = 9,
 }
 
 /// <summary>

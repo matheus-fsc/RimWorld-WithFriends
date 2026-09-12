@@ -15,6 +15,16 @@ public enum EstadoSessaoLocal
     Convidado,
     Congelando,
     Simulando,
+
+    /// <summary>
+    /// Divergiu, e os dois lados estão refazendo o ponto de junção.
+    ///
+    /// <para>O laço de tick exige <see cref="Simulando"/>, então este estado já
+    /// congela a simulação por si — que é o que se quer: ninguém avança
+    /// enquanto o estado para o qual vão voltar está viajando.</para>
+    /// </summary>
+    Ressincronizando,
+
     Encerrando,
 }
 
@@ -366,6 +376,7 @@ public sealed class SessaoCliente
         // pelo reflexo antes de alguém reparar que ele existiu, e o botão ficava
         // preso na velocidade antiga para sempre.
         PropagarVelocidade();
+        AvisarSeAVisitaParou();
 
         long tick = TickDeSessao;
         bool tickAlinhado = digitalPendente != null;
@@ -468,6 +479,52 @@ public sealed class SessaoCliente
     /// Chegou a partida do anfitrião. A partir daqui o visitante **troca de
     /// jogo**: o que precisa sobreviver vai para <see cref="VisitaEmAndamento"/>.
     /// </summary>
+    int ultimaRessincronizacao;
+
+    /// <summary>
+    /// Refaz o ponto de junção no meio da visita, em vez de perder o encontro.
+    ///
+    /// <para>É o mesmo caminho do bootstrap (ADR 0010), disparado por
+    /// divergência em vez de por alguém entrando: o anfitrião manda a partida e
+    /// <b>os dois</b> recarregam. Recarregar dos dois lados não é desperdício —
+    /// um jogo vivo e o mesmo jogo recém-carregado não são idênticos (medimos
+    /// 891 coisas de diferença), e sair de estados diferentes é justamente o que
+    /// produziria a próxima divergência.</para>
+    ///
+    /// <para>O pedido é <b>idempotente</b>: o coordenador o repete enquanto os
+    /// dois não chegarem, para que um lado que o perdeu no meio de um
+    /// recarregamento não deixe a visita pendurada. Quem já tratou aquele número
+    /// ignora.</para>
+    /// </summary>
+    public void Ressincronizar(SessaoRessincronizar pedido)
+    {
+        if (Atual == null || pedido.SessaoId != Atual.SessaoId) return;
+        if (pedido.Numero <= ultimaRessincronizacao) return;
+        ultimaRessincronizacao = pedido.Numero;
+
+        Estado = EstadoSessaoLocal.Ressincronizando;
+        agenda.Clear();
+
+        Log.Warning(
+            $"[WithFriends] ressincronizando (#{pedido.Numero}): voltando ao tick " +
+            $"{pedido.TickAlvo}. {pedido.Explicacao}");
+
+        Messages.Message(
+            $"A visita divergiu e está voltando ao último ponto em que os dois batiam " +
+            $"(tick {pedido.TickAlvo}). O encontro continua.",
+            MessageTypeDefOf.NeutralEvent, historical: true);
+
+        // Tudo o que descrevia o passo velho tem de sumir junto com ele.
+        Atual = Atual.APartirDoTick(pedido.TickAlvo);
+
+        // O visitante não faz nada aqui: ele espera a partida chegar, e
+        // `PartidaRecebida` cuida do resto — a mesma porta do bootstrap.
+        if (VisitaEmAndamento.SouVisitante) return;
+
+        BootstrapDaPartida.Enviar(
+            Atual.SessaoId, pedido.TickAlvo, Atual, congelador.HashPreSessao);
+    }
+
     public void PartidaRecebida(SessaoPartida mensagem)
     {
         if (Atual == null || mensagem.SessaoId != Atual.SessaoId) return;
@@ -804,6 +861,62 @@ public sealed class SessaoCliente
         TickDeSessao++;
     }
 
+    long passoQuandoOlhei = -1;
+    float quandoOPassoMudou;
+    float ultimoAvisoDeParada;
+
+    /// <summary>
+    /// A visita parada não pode ser um mistério.
+    ///
+    /// <para>Numa sessão o relógio local é um <b>voto</b>: quem libera passo é o
+    /// coordenador. Se ele some, nada anda — e a tela fica exatamente igual a um
+    /// jogo travado. Aconteceu: a conexão caiu no meio de um combate, o jogador
+    /// apertou espaço dezenas de vezes, e o único sinal era um aviso de
+    /// reconexão perdido no log. Do lado de dentro do jogo, "congelou".</para>
+    ///
+    /// <para>Botão de velocidade que não responde numa visita quase sempre quer
+    /// dizer isto, então a mensagem diz o estado da conexão junto: é a diferença
+    /// entre "o mod travou" e "o coordenador não está respondendo".</para>
+    /// </summary>
+    void AvisarSeAVisitaParou()
+    {
+        float agora = Time.realtimeSinceStartup;
+
+        if (TickDeSessao != passoQuandoOlhei)
+        {
+            passoQuandoOlhei = TickDeSessao;
+            quandoOPassoMudou = agora;
+            return;
+        }
+
+        // Parado é normal: com o jogo pausado o passo também anda, mas devagar.
+        // Cinco segundos sem nenhum passo é outra coisa.
+        if (agora - quandoOPassoMudou < SegundosParadoParaAvisar) return;
+        if (agora - ultimoAvisoDeParada < SegundosEntreAvisosDeParada) return;
+
+        ultimoAvisoDeParada = agora;
+
+        var conexao = WithFriendsMod.Cliente.Estado;
+        string diagnostico = conexao == Net.EstadoConexao.Conectado
+            ? "o coordenador está conectado mas não liberou o próximo passo — " +
+              "o outro jogador pode estar carregando ou travado"
+            : $"a conexão com o coordenador está {conexao}";
+
+        string recado =
+            $"A visita está parada há {agora - quandoOPassoMudou:F0}s: {diagnostico}. " +
+            "O relógio local não manda sozinho numa visita — por isso os botões de " +
+            "velocidade não respondem.";
+
+        Messages.Message(recado, MessageTypeDefOf.NegativeEvent, historical: false);
+        Log.Warning(
+            $"[WithFriends] visita parada no passo {TickDeSessao} há " +
+            $"{agora - quandoOPassoMudou:F0}s (liberado até " +
+            $"{RelogioDeSessaoRimWorld.LimiteDeTick}, conexão {conexao}).");
+    }
+
+    const float SegundosParadoParaAvisar = 5f;
+    const float SegundosEntreAvisosDeParada = 10f;
+
     public void TickCompleto(long tickDeSessao)
     {
         if (Estado != EstadoSessaoLocal.Simulando || Atual == null) return;
@@ -825,7 +938,22 @@ public sealed class SessaoCliente
 
         digitalPendente = (tickDeSessao, digital.FecharIntervalo(tickDeSessao).Resumo());
 
-
+        // **Os dois relógios, lado a lado, em toda amostra.**
+        //
+        // Comparando os diários de uma divergência, os dois lados tinham o mesmo
+        // trabalho de simulação com o rótulo de passo deslocado em um: o que um
+        // registrou no passo N, o outro registrou no N+1. Com os dois relógios
+        // só no retrato do fim, não dava para dizer QUANDO o deslocamento
+        // nasceu — e é o quando que aponta a causa.
+        //
+        // Se os passos batem e os ticks de jogo não, os dois lados discordaram
+        // sobre algum passo simular, e a digital passou a comparar estados de
+        // momentos diferentes. Isso é desync de relógio, não de simulação, e
+        // procurar sorteio nesse caso é procurar no lugar errado.
+        Log.Message(
+            $"[WithFriends/digital] passo {tickDeSessao}: tick de jogo " +
+            $"{Find.TickManager.TicksGame}, {passosSimulados} simulados, " +
+            $"{passosSemSimular} só com comando");
     }
 
     public void Agendar(SessaoComando comando)

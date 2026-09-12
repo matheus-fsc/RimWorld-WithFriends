@@ -9,6 +9,16 @@ public enum EstadoSessao
 {
     Convidada,
     Ativa,
+
+    /// <summary>
+    /// Divergiu, e os dois lados estão refazendo o ponto de junção.
+    ///
+    /// <para>A barreira não libera passo e comando nenhum é carimbado: o estado
+    /// para o qual eles vão voltar ainda está viajando. Quando os dois relatarem
+    /// o tick do novo ponto, a sessão volta a ser <see cref="Ativa"/>.</para>
+    /// </summary>
+    Ressincronizando,
+
     Encerrada,
 }
 
@@ -61,6 +71,20 @@ public sealed class Sessao
     public string ColoniaAnfitria { get; init; } = "";
     public int Semente { get; init; }
     public long TickInicial { get; init; }
+
+    /// <summary>
+    /// Quantas vezes esta sessão já refez o ponto de junção.
+    ///
+    /// <para>Existe porque ressincronizar não pode virar laço: uma causa que
+    /// diverge de novo em dez segundos vai divergir na décima vez também, e aí a
+    /// visita é só uma sequência de recarregamentos. Passado o orçamento, o
+    /// aborto volta a ser a resposta — e aí é desistir com diagnóstico, não por
+    /// falta de tentativa.</para>
+    /// </summary>
+    public int Ressincronizacoes { get; internal set; }
+
+    /// <summary>Divergências já registradas nesta sessão, para o relatório do fim.</summary>
+    public List<string> RelatoriosDeDivergencia { get; } = new();
 
     /// <summary>Ensaio não compara digitais: ver <see cref="TipoSessao.Ensaio"/>.</summary>
     public bool CompararDigitais => Tipo != TipoSessao.Ensaio;
@@ -411,6 +435,29 @@ public sealed class Sessao
     /// </summary>
     public bool TodosPausados() =>
         TickPorParticipante.Count >= 2 && Velocidade == VelocidadeDeSessao.Pausado;
+
+    /// <summary>
+    /// Recomeça a contagem a partir do ponto de junção novo.
+    ///
+    /// <para>Tudo o que descrevia o passo antigo tem de sumir: relatos, teto,
+    /// carimbo e digitais. Deixar qualquer um deles para trás faria o primeiro
+    /// comando depois da ressincronização nascer para um passo que, do outro
+    /// lado, já passou — o mesmo erro que matava a construção com o jogo
+    /// parado.</para>
+    /// </summary>
+    public void RecomecarEm(long tick)
+    {
+        TickPorParticipante.Clear();
+        Fingerprints.Clear();
+        TicksSuspeitos.Clear();
+        DivergenciasSeguidas = 0;
+
+        relogio = tick;
+        TetoConcedido = tick;
+        ultimoCarimbo = tick - 1;
+        passoParado = null;
+        UltimoTickValido = tick;
+    }
 
     public long TickLiberado()
     {

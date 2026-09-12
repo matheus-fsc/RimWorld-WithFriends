@@ -219,6 +219,10 @@ public class SincronizacaoComponent : GameComponent
                 Session.BootstrapDeMapa.Receber(envelope.Decode(SessaoMapa.Read));
                 break;
 
+            case MessageId.SessaoRessincronizar:
+                Atual?.Sessao.Ressincronizar(envelope.Decode(SessaoRessincronizar.Read));
+                break;
+
             case MessageId.SessaoPartida:
                 Atual?.Sessao.PartidaRecebida(envelope.Decode(SessaoPartida.Read));
                 break;

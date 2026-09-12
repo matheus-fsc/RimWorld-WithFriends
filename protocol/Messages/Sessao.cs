@@ -139,6 +139,27 @@ public sealed class SessaoInicio : IMessage
     /// </summary>
     public bool CompararDigitais { get; init; } = true;
 
+    /// <summary>
+    /// A mesma sessão, recomeçando de outro tick.
+    ///
+    /// <para>Serve ao ponto de junção refeito: tudo o que descreve a visita
+    /// continua valendo — quem é anfitrião, qual colônia, qual semente — só o
+    /// tick de partida muda. Copiar aqui evita que o cliente monte um
+    /// <c>SessaoInicio</c> pela metade e descubra o campo que esqueceu com a
+    /// visita já rodando.</para>
+    /// </summary>
+    public SessaoInicio APartirDoTick(long tick) => new()
+    {
+        SessaoId = SessaoId,
+        Tipo = Tipo,
+        Anfitriao = Anfitriao,
+        Visitante = Visitante,
+        ColoniaAnfitria = ColoniaAnfitria,
+        TickInicial = tick,
+        Semente = Semente,
+        CompararDigitais = CompararDigitais,
+    };
+
     public MessageId Id => MessageId.SessaoInicio;
 
     public void Write(BinaryWriter w)
@@ -461,6 +482,55 @@ public sealed class SessaoPartida : IMessage
             Comprimido = r.ReadBytes(tamanho),
         };
     }
+}
+
+/// <summary>
+/// sessao.ressincronizar — <b>ponto de junção novo</b>, no meio da visita.
+///
+/// <para>Antes, divergir era o fim: os dois voltavam ao checkpoint pré-sessão e
+/// o encontro se perdia. Isso tornava cada causa desconhecida cara — e as causas
+/// desconhecidas só aparecem jogando.</para>
+///
+/// <para>A saída é a mesma coisa que o bootstrap (ADR 0010): o anfitrião manda a
+/// partida, os <b>dois</b> recarregam, e a visita continua de um estado que os
+/// dois acabaram de restaurar. É o <c>CreateJoinPoint</c> do Multiplayer, agora
+/// disparado por divergência em vez de por alguém entrando.</para>
+///
+/// <para>O ganho não é só não perder o encontro: é poder <b>continuar</b> depois
+/// de uma divergência. Cada visita passa a render vários relatórios de
+/// divergência em vez de um, e as causas restantes aparecem em lote em vez de
+/// uma por sessão.</para>
+/// </summary>
+public sealed class SessaoRessincronizar : IMessage
+{
+    public string SessaoId { get; init; } = "";
+
+    /// <summary>Por que — vai para a tela dos dois jogadores e para o diário.</summary>
+    public string Explicacao { get; init; } = "";
+
+    /// <summary>Último tick em que os dois bateram: de onde a visita recomeça.</summary>
+    public long TickAlvo { get; init; }
+
+    /// <summary>Qual ressincronização desta sessão é esta. O orçamento é do coordenador.</summary>
+    public int Numero { get; init; }
+
+    public MessageId Id => MessageId.SessaoRessincronizar;
+
+    public void Write(BinaryWriter w)
+    {
+        w.Write(SessaoId);
+        w.Write(Explicacao);
+        w.Write(TickAlvo);
+        w.Write(Numero);
+    }
+
+    public static SessaoRessincronizar Read(BinaryReader r) => new()
+    {
+        SessaoId = r.ReadString(),
+        Explicacao = r.ReadString(),
+        TickAlvo = r.ReadInt64(),
+        Numero = r.ReadInt32(),
+    };
 }
 
 /// <summary>sessao.fim — encerramento combinado; cada lado faz commit do próprio save.</summary>

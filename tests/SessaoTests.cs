@@ -277,8 +277,11 @@ public class SessaoTests
     }
 
     [Fact]
-    public void Divergencia_que_persiste_aborta()
+    public void Divergencia_que_persiste_pede_ponto_de_juncao_novo()
     {
+        // Era aborto. Virou ressincronização: o aborto agora só vem depois de
+        // o orçamento de pontos de junção acabar — ver
+        // `Ressincronizar_tem_orcamento_e_depois_aborta`.
         var inicio = AbrirSessao();
 
         IMessage? resposta = null;
@@ -289,17 +292,20 @@ public class SessaoTests
             resposta = broker.Barreira(Visitante, new SessaoBarreira { SessaoId = inicio.SessaoId, Tick = tick, Fingerprint = $"rng:b{i}" });
         }
 
-        var aborto = Assert.IsType<SessaoAborto>(resposta);
-        Assert.Contains("não voltaram a bater", aborto.Explicacao);
-        Assert.Contains("Ticks suspeitos", aborto.Explicacao);
-        Assert.Empty(broker.Ativas);
+        var pedido = Assert.IsType<SessaoRessincronizar>(resposta);
+        Assert.Contains("Ticks suspeitos", pedido.Explicacao);
+
+        // A sessão **continua viva**. É o ponto inteiro da mudança: perder o
+        // encontro era o que tornava cada causa desconhecida cara.
+        Assert.Single(broker.Ativas);
     }
 
     [Fact]
-    public void Divergencia_de_RNG_aborta_no_tick_em_que_aconteceu()
+    public void Divergencia_de_RNG_recomeca_do_ultimo_tick_consistente()
     {
         // §14.3: a impressão digital é o estado do RNG, e diverge de imediato.
-        // §2.3: aborta e volta os dois ao checkpoint pré-sessão.
+        // O ponto de junção novo sai do último tick em que os dois bateram —
+        // não do tick da detecção, que já está do lado errado da divergência.
         var inicio = AbrirSessao();
 
         broker.Barreira(Anfitriao, new SessaoBarreira { SessaoId = inicio.SessaoId, Tick = 100, Fingerprint = "rng:igual" });
@@ -314,11 +320,12 @@ public class SessaoTests
             resposta = broker.Barreira(Visitante, new SessaoBarreira { SessaoId = inicio.SessaoId, Tick = tick, Fingerprint = $"rng:outro{i}" });
         }
 
-        var aborto = Assert.IsType<SessaoAborto>(resposta);
-        Assert.Equal(MotivoFimDeSessao.Desync, aborto.Motivo);
-        Assert.Equal(100, aborto.UltimoTickValido);          // último ponto consistente
-        Assert.Contains("nunca a colônia", aborto.Explicacao);
-        Assert.Empty(broker.Ativas);                          // parou de simular na hora
+        var pedido = Assert.IsType<SessaoRessincronizar>(resposta);
+        Assert.Equal(100, pedido.TickAlvo);          // último ponto consistente
+
+        // A barreira congela no lugar: ninguém avança enquanto o estado novo
+        // está viajando. A sessão segue viva — é o conserto, não o fim.
+        Assert.Equal(EstadoSessao.Ressincronizando, broker.PorId(inicio.SessaoId)!.Estado);
     }
 
     [Fact]
@@ -545,7 +552,8 @@ public class SessaoTests
         var inicio = AbrirSessao();
 
         foreach (var tipo in new[] { TipoDeComando.Alistar, TipoDeComando.OrdemDeTrabalho,
-                                     TipoDeComando.Designar, TipoDeComando.Velocidade })
+                                     TipoDeComando.Designar, TipoDeComando.Velocidade,
+                                     TipoDeComando.OrdemPriorizada, TipoDeComando.Alternar })
         {
             var comando = new SessaoComando
             {
@@ -555,6 +563,111 @@ public class SessaoTests
             Assert.NotNull(broker.Agendar(Visitante, comando, out string? recusa));
             Assert.Null(recusa);
         }
+    }
+
+    [Fact]
+    public void Divergir_refaz_o_ponto_de_juncao_em_vez_de_abortar()
+    {
+        // A alavanca que muda o **modo** de falha em vez da taxa. Antes,
+        // qualquer causa desconhecida custava o encontro inteiro — e causa
+        // desconhecida só aparece jogando. Agora custa um recarregamento, e a
+        // visita rende vários relatórios em vez de um.
+        var inicio = AbrirSessao();
+        var t = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        IMessage? resposta = null;
+        for (int i = 1; i <= BrokerDeSessoes.DivergenciasParaAbortar; i++)
+        {
+            long tick = 100 + i * 8;
+            broker.Barreira(Anfitriao, Digital(inicio.SessaoId, tick, "aaa"), t);
+            resposta = broker.Barreira(Visitante, Digital(inicio.SessaoId, tick, "bbb"), t);
+        }
+
+        var pedido = Assert.IsType<SessaoRessincronizar>(resposta);
+        Assert.Equal(1, pedido.Numero);
+        Assert.Contains("calculou", pedido.Explicacao);
+
+        // Enquanto o ponto novo não fica de pé, comando nenhum é carimbado — o
+        // passo contra o qual carimbar ainda está viajando.
+        Assert.Null(broker.Agendar(Anfitriao, new SessaoComando
+        {
+            SessaoId = inicio.SessaoId,
+            Payload = new[] { (byte)TipoDeComando.Alistar },
+        }, out string? recusa));
+        Assert.Contains("ressincronizando", recusa!, StringComparison.OrdinalIgnoreCase);
+
+        // Um lado chegou: ainda espera o outro, e o pedido é reenviado — se ele
+        // se perdesse num recarregamento, a sessão ficaria pendurada.
+        var esperando = broker.Barreira(Anfitriao,
+            new SessaoBarreira { SessaoId = inicio.SessaoId, Tick = pedido.TickAlvo }, t);
+        Assert.IsType<SessaoRessincronizar>(esperando);
+
+        // Os dois chegaram: a visita continua.
+        var voltou = broker.Barreira(Visitante,
+            new SessaoBarreira { SessaoId = inicio.SessaoId, Tick = pedido.TickAlvo }, t);
+        Assert.IsType<SessaoBarreira>(voltou);
+
+        Assert.NotNull(broker.Agendar(Anfitriao, new SessaoComando
+        {
+            SessaoId = inicio.SessaoId,
+            Payload = new[] { (byte)TipoDeComando.Alistar },
+        }, out _));
+    }
+
+    [Fact]
+    public void Ressincronizar_tem_orcamento_e_depois_aborta()
+    {
+        // Ressincronizar não pode virar laço: uma causa que volta em dez
+        // segundos vai voltar na décima vez, e aí a visita é só uma sequência de
+        // recarregamentos. Passado o orçamento, desistir com diagnóstico.
+        var inicio = AbrirSessao();
+        var t = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        long tick = 100;
+
+        IMessage? resposta = null;
+        for (int rodada = 0; rodada <= BrokerDeSessoes.RessincronizacoesPorSessao; rodada++)
+        {
+            for (int i = 0; i < BrokerDeSessoes.DivergenciasParaAbortar; i++)
+            {
+                tick += 8;
+                broker.Barreira(Anfitriao, Digital(inicio.SessaoId, tick, "aaa"), t);
+                resposta = broker.Barreira(Visitante, Digital(inicio.SessaoId, tick, "bbb"), t);
+            }
+
+            if (resposta is SessaoRessincronizar pedido)
+            {
+                broker.Barreira(Anfitriao,
+                    new SessaoBarreira { SessaoId = inicio.SessaoId, Tick = pedido.TickAlvo }, t);
+                broker.Barreira(Visitante,
+                    new SessaoBarreira { SessaoId = inicio.SessaoId, Tick = pedido.TickAlvo }, t);
+            }
+        }
+
+        var aborto = Assert.IsType<SessaoAborto>(resposta);
+
+        // O aborto carrega o histórico inteiro: se chegamos até aqui, cada
+        // divergência é uma pista, e jogá-las fora seria perder o que a visita
+        // custou para produzir.
+        Assert.Contains("Divergências desta sessão", aborto.Explicacao);
+    }
+
+    static SessaoBarreira Digital(string sessaoId, long tick, string digital) => new()
+    {
+        SessaoId = sessaoId,
+        Tick = tick,
+        Fingerprint = digital,
+    };
+
+    [Fact]
+    public void So_o_incidente_e_decisao_da_colonia()
+    {
+        // A lista de só-anfitrião é curta de propósito, e cresce só por decisão
+        // (§4). Este teste existe para que **acrescentar** alguém a ela seja um
+        // ato consciente: um tipo novo nasce valendo para os dois, e quem quiser
+        // restringi-lo tem de vir mudar isto aqui.
+        foreach (TipoDeComando tipo in Enum.GetValues(typeof(TipoDeComando)))
+            Assert.Equal(tipo == TipoDeComando.Incidente,
+                AutoridadeDeComando.SoDoAnfitriao((byte)tipo));
     }
 
     [Fact]

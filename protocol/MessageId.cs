@@ -46,6 +46,7 @@ public enum MessageId : ushort
     SessaoAborto = 307,
     SessaoMapa = 308,
     SessaoPartida = 309,
+    SessaoRessincronizar = 310,
 
     // mercado.*
     MercadoAnuncio = 400,

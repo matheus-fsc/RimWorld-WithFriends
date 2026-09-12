@@ -67,6 +67,29 @@ public static class ComandoDeSessao
     }
 
     /// <summary>
+    /// "Priorizar este trabalho": a ordem, mais as duas coisas que o chamador
+    /// escreve **depois** de a ordem ser aceita.
+    ///
+    /// <para>Reaproveita o corpo de <see cref="Ordem"/> e troca só o primeiro
+    /// byte: é a mesma ordem, com um rabicho. Duplicar o formato aqui seria
+    /// duplicar a chance de os dois lados lerem campos diferentes.</para>
+    /// </summary>
+    public static byte[] OrdemPriorizada(int pawnId, Job job, WorkGiver doador, IntVec3 celula)
+    {
+        var ordem = Ordem(pawnId, job, doador.def?.tagToGive, enfileirar: false);
+        ordem[0] = (byte)TipoDeComando.OrdemPriorizada;
+
+        using var ms = new MemoryStream();
+        using var w = new BinaryWriter(ms);
+        w.Write(ordem);
+        w.Write(doador.def?.defName ?? "");
+        w.Write(celula.x);
+        w.Write(celula.y);
+        w.Write(celula.z);
+        return ms.ToArray();
+    }
+
+    /// <summary>
     /// Um alvo é uma coisa (id) **ou** uma célula. Ids de coisa valem dos dois
     /// lados porque a partida é a mesma (ADR 0010).
     /// </summary>
@@ -145,7 +168,12 @@ public static class ComandoDeSessao
         };
     }
 
-    static Thing? EncontrarCoisa(int thingIDNumber)
+    /// <summary>
+    /// Acha qualquer coisa do mapa pelo id — não só pawn. Um item no chão não
+    /// está em <c>mapPawns</c>, e proibir um item é tão comando quanto mandar um
+    /// colono andar.
+    /// </summary>
+    public static Thing? EncontrarCoisa(int thingIDNumber)
     {
         foreach (var mapa in Find.Maps)
         foreach (var coisa in mapa.listerThings.AllThings)
@@ -272,6 +300,25 @@ public static class ComandoDeSessao
             // jogador está olhando — ver SelecaoForaDoComando.
             return SelecaoForaDoComando.SemSelecao(() => Executar(payload));
         }
+        catch (Exception e)
+        {
+            // **Um comando que estoura não pode subir até o `Update()`.**
+            //
+            // Foi o que aconteceu: uma NullReferenceException saiu daqui, virou
+            // "Root level exception in Update()" e o rastreio apontava só o
+            // deslocamento de IL — nem o tipo de comando, nem o payload. Com os
+            // dois lados estourando igual, a partida seguiu torta; com um só
+            // estourando, seria divergência silenciosa.
+            //
+            // Agora o tipo vem junto, e o payload também: comando é dado, e dado
+            // que quebra o programa precisa aparecer inteiro.
+            Log.Error(
+                $"[WithFriends] comando {(TipoDeComando)payload[0]} " +
+                $"({payload.Length} bytes) estourou ao ser aplicado: {e}\n" +
+                $"  payload: {BitConverter.ToString(payload, 0, Math.Min(payload.Length, 64))}");
+
+            return $"ERRO ao aplicar {(TipoDeComando)payload[0]}: {e.Message}";
+        }
         finally
         {
             Aplicando = false;
@@ -313,27 +360,59 @@ public static class ComandoDeSessao
                 using var r = new BinaryReader(ms);
                 r.ReadByte();
 
-                int pawnId = r.ReadInt32();
-                string defName = r.ReadString();
-                var pawn = Encontrar(pawnId);
-                var def = DefDatabase<JobDef>.GetNamedSilentFail(defName);
-                if (pawn?.jobs == null || def == null) return $"ordem inválida ({defName} para {pawnId})";
-
-                var job = JobMaker.MakeJob(def);
-                job.targetA = LerAlvo(r);
-                job.targetB = LerAlvo(r);
-                job.targetC = LerAlvo(r);
-                job.count = r.ReadInt32();
-                job.playerForced = r.ReadBoolean();
-                job.haulMode = (HaulMode)r.ReadInt32();
-                job.expiryInterval = r.ReadInt32();
-                job.checkOverrideOnExpire = r.ReadBoolean();
-                JobTag? tag = r.ReadBoolean() ? (JobTag)r.ReadInt32() : null;
-                if (tag == null) r.ReadInt32();
-                bool enfileirar = r.ReadBoolean();
+                var (pawn, job, tag, enfileirar, erroOrdem) = LerOrdem(r);
+                if (pawn?.jobs == null || job == null) return erroOrdem;
 
                 pawn.jobs.TryTakeOrderedJob(job, tag, enfileirar);
-                return $"{pawn.LabelShort} → {def.defName}";
+                return $"{pawn.LabelShort} → {job.def.defName}";
+            }
+
+            case TipoDeComando.OrdemPriorizada:
+            {
+                using var ms = new MemoryStream(payload, writable: false);
+                using var r = new BinaryReader(ms);
+                r.ReadByte();
+
+                var (pawn, job, tag, _, erroOrdem) = LerOrdem(r);
+                if (pawn?.jobs == null || job == null) return erroOrdem;
+
+                string doadorNome = r.ReadString();
+                var celula = new IntVec3(r.ReadInt32(), r.ReadInt32(), r.ReadInt32());
+                var doadorDef = DefDatabase<WorkGiverDef>.GetNamedSilentFail(doadorNome);
+
+                // O corpo de `TryTakeOrderedJobPrioritizedWork`, refeito aqui.
+                //
+                // Não dá para chamar o original: ele pediria um `WorkGiver`
+                // vivo, e o que atravessa a rede é o def. O que ele faz depois
+                // da ordem são estas duas escritas — e são elas, não a ordem,
+                // que faltavam do outro lado.
+                if (!pawn.jobs.TryTakeOrderedJob(job, tag)) return $"{pawn.LabelShort}: ordem recusada";
+
+                job.workGiverDef = doadorDef;
+                if (doadorDef is { prioritizeSustains: true })
+                    pawn.mindState.priorityWork.Set(celula, doadorDef);
+
+                return $"{pawn.LabelShort} → {job.def.defName} (priorizado: {doadorNome})";
+            }
+
+            case TipoDeComando.Estoque:
+            {
+                using var ms = new MemoryStream(payload, writable: false);
+                using var r = new BinaryReader(ms);
+                r.ReadByte();
+                return EstoqueDeSessao.Aplicar(r);
+            }
+
+            case TipoDeComando.Alternar:
+            {
+                using var ms = new MemoryStream(payload, writable: false);
+                using var r = new BinaryReader(ms);
+                r.ReadByte();
+
+                int coisaId = r.ReadInt32();
+                string chave = r.ReadString();
+                bool valor = r.ReadBoolean();
+                return AlternaveisDeSessao.Aplicar(coisaId, chave, valor);
             }
 
             case TipoDeComando.DesignarVarias:
@@ -454,6 +533,36 @@ public static class ComandoDeSessao
 
         return null;
     }
+
+    /// <summary>
+    /// Lê o corpo de uma ordem. Espelha <see cref="Ordem"/>, e é o mesmo corpo
+    /// para <see cref="TipoDeComando.OrdemPriorizada"/> — o leitor para no fim
+    /// dele, e quem chamou continua lendo o que vem depois.
+    /// </summary>
+    static (Pawn? pawn, Job? job, JobTag? tag, bool enfileirar, string erro) LerOrdem(BinaryReader r)
+    {
+        int pawnId = r.ReadInt32();
+        string defName = r.ReadString();
+        var pawn = Encontrar(pawnId);
+        var def = DefDatabase<JobDef>.GetNamedSilentFail(defName);
+        if (pawn?.jobs == null || def == null)
+            return (null, null, null, false, $"ordem inválida ({defName} para {pawnId})");
+
+        var job = JobMaker.MakeJob(def);
+        job.targetA = LerAlvo(r);
+        job.targetB = LerAlvo(r);
+        job.targetC = LerAlvo(r);
+        job.count = r.ReadInt32();
+        job.playerForced = r.ReadBoolean();
+        job.haulMode = (HaulMode)r.ReadInt32();
+        job.expiryInterval = r.ReadInt32();
+        job.checkOverrideOnExpire = r.ReadBoolean();
+        JobTag? tag = r.ReadBoolean() ? (JobTag)r.ReadInt32() : null;
+        if (tag == null) r.ReadInt32();
+        bool enfileirar = r.ReadBoolean();
+
+        return (pawn, job, tag, enfileirar, "");
+    }
 }
 
 /// <summary>
@@ -532,8 +641,81 @@ public static class AlistarViraComando
 }
 
 /// <summary>
+/// "Priorizar este trabalho" — o clique direito que manda fazer agora.
+///
+/// <para><b>Por que precisa de intercepção própria.</b> Ele chama
+/// <c>TryTakeOrderedJob</c> por dentro, então parecia coberto. Não é:</para>
+///
+/// <code>
+/// if (TryTakeOrderedJob(job, giver.def.tagToGive)) {
+///     job.workGiverDef = giver.def;
+///     if (giver.def.prioritizeSustains)
+///         pawn.mindState.priorityWork.Set(cell, giver.def);
+///     return true;
+/// }
+/// </code>
+///
+/// <para>A nossa intercepção de dentro devolve "aceito" para a interface não
+/// mostrar recusa — e o chamador acredita, e escreve essas duas coisas. Só que
+/// escreve na máquina de quem clicou: o <c>job</c> local já foi descartado, e
+/// <c>priorityWork</c> é estado de simulação. O outro lado não escreve nada.
+/// Divergência silenciosa, sem erro nenhum, a partir do tick seguinte.</para>
+///
+/// <para>É o segundo caso da mesma forma (o primeiro foi o setter de
+/// <c>TogglePaused</c> escrevendo o campo por baixo da propriedade): interceptar
+/// o que é chamado não cobre o que o chamador faz com a resposta.</para>
+/// </summary>
+[HarmonyPatch(typeof(Verse.AI.Pawn_JobTracker),
+    nameof(Verse.AI.Pawn_JobTracker.TryTakeOrderedJobPrioritizedWork))]
+public static class OrdemPriorizadaViraComando
+{
+    static readonly System.Reflection.FieldInfo? CampoDoPawn =
+        AccessTools.Field(typeof(Verse.AI.Pawn_JobTracker), "pawn");
+
+    [HarmonyPrefix]
+    public static bool Antes(
+        Verse.AI.Pawn_JobTracker __instance,
+        Verse.AI.Job job,
+        WorkGiver giver,
+        IntVec3 cell,
+        ref bool __result)
+    {
+        var sessao = Colony.SincronizacaoComponent.Atual?.Sessao;
+        if (sessao is not { Estado: EstadoSessaoLocal.Simulando } || sessao.Atual == null) return true;
+        if (ComandoDeSessao.Aplicando) return true;
+        if (!NaInterface.Agora) return true;
+        if (job?.def == null || giver?.def == null) return true;
+
+        var pawn = CampoDoPawn?.GetValue(__instance) as Pawn;
+        if (pawn == null) return true;
+
+        if (!PosseDePawns.EhMeu(pawn))
+        {
+            PosseDePawns.AvisarQueNaoEhSeu(pawn);
+            __result = false;
+            return false;
+        }
+
+        GuardasDeDeterminismo.Disparou("ordem priorizada virou comando");
+
+        WithFriendsMod.Cliente.Enviar(new Protocol.Messages.SessaoComando
+        {
+            SessaoId = sessao.Atual.SessaoId,
+            Payload = ComandoDeSessao.OrdemPriorizada(pawn.thingIDNumber, job, giver, cell),
+        });
+
+        Log.Message(
+            $"[WithFriends] {job.def.defName} priorizado para {pawn.LabelShort} " +
+            $"({giver.def.defName}) proposto como comando");
+
+        __result = true;
+        return false;
+    }
+}
+
+/// <summary>
 /// Toda ordem manual do jogador passa por aqui: clique com o botão direito,
-/// "priorizar trabalho", mandar atacar. Numa sessão ela vira comando.
+/// mandar atacar, lançar um poder. Numa sessão ela vira comando.
 ///
 /// É o registro de maior alcance — uma intercepção cobre quase tudo o que um
 /// jogador faz numa visita. O Multiplayer chega à mesma conclusão e sincroniza

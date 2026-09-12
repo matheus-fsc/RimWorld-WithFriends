@@ -1,0 +1,147 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
+using HarmonyLib;
+using Verse;
+
+namespace WithFriends.Client.Session;
+
+/// <summary>
+/// Cada instância do jogo escreve o próprio diário.
+///
+/// <para><b>O problema que isto resolve.</b> As duas instâncias do RimWorld
+/// escrevem no mesmo <c>Player.log</c>, e a segunda a abrir apaga o da primeira.
+/// Numa divergência, o lado que detecta e o lado que causou raramente são o
+/// mesmo — e o log que sobrevive é o de quem abriu por último, que é sorteio
+/// puro.</para>
+///
+/// <para>Já custou caro três vezes: uma em que deduzi a causa a partir do lado
+/// errado, e duas em que o rastreio de RNG e o de estado de pawn existiam nos
+/// dois lados e só um chegou até aqui. Comparar os dois lados é o método — sem
+/// os dois arquivos, não há método.</para>
+///
+/// <para>O arquivo fica em <c>WithFriends/diario/</c>, nomeado pelo início do id
+/// do jogador e pela hora de abertura, então as duas instâncias nunca colidem e
+/// dá para saber de quem é cada um.</para>
+///
+/// <para>Só as linhas do mod entram, mais erros e avisos de qualquer origem —
+/// um erro do jogo no meio de uma visita costuma ser a causa, não o ruído.</para>
+/// </summary>
+[HarmonyPatch]
+public static class DiarioDaInstancia
+{
+    static StreamWriter? arquivo;
+    static readonly object Trava = new();
+
+    /// <summary>
+    /// Linhas guardadas antes de o diário abrir.
+    ///
+    /// <para>O mod loga durante a carga, antes de existir pasta de save
+    /// utilizável. Sem isto, a parte mais interessante — quantos remendos
+    /// instalaram, quais falharam — ficava justamente de fora.</para>
+    /// </summary>
+    static readonly List<string> Antecipadas = new();
+
+    public static string? Caminho { get; private set; }
+
+    public static void Abrir(string playerId)
+    {
+        lock (Trava)
+        {
+            if (arquivo != null) return;
+
+            try
+            {
+                string pasta = Path.Combine(GenFilePaths.SaveDataFolderPath, "WithFriends", "diario");
+                Directory.CreateDirectory(pasta);
+
+                string quem = playerId.Length >= 8 ? playerId.Substring(0, 8) : "sem-id";
+                Caminho = Path.Combine(pasta, $"{DateTime.Now:yyyyMMdd-HHmmss}-{quem}.log");
+
+                arquivo = new StreamWriter(Caminho, append: true, Encoding.UTF8) { AutoFlush = true };
+
+                foreach (var linha in Antecipadas) arquivo.WriteLine(linha);
+                Antecipadas.Clear();
+
+                arquivo.WriteLine($"=== diário aberto: {DateTime.Now:O}, jogador {playerId} ===");
+                Log.Message($"[WithFriends] diário desta instância: {Caminho}");
+            }
+            catch (Exception e)
+            {
+                // Diário é instrumento, não recurso: se não dá para escrever, o
+                // jogo segue. §14.5.
+                Log.Warning($"[WithFriends] não foi possível abrir o diário: {e.Message}");
+                arquivo = null;
+            }
+        }
+    }
+
+    public static void Fechar()
+    {
+        lock (Trava)
+        {
+            arquivo?.Flush();
+            arquivo?.Dispose();
+            arquivo = null;
+        }
+    }
+
+    /// <summary>
+    /// A última mensagem aceita era nossa? Ver <see cref="Escrever"/>.
+    /// </summary>
+    static bool ultimaFoiNossa;
+
+    static void Escrever(string nivel, string texto)
+    {
+        if (texto == null) return;
+
+        if (nivel == "msg")
+        {
+            // **Continuação conta como nossa.**
+            //
+            // O histórico de RNG sai uma linha por tick, cada uma numa chamada
+            // de `Log.Message` separada e começando com espaços — não com
+            // `[WithFriends]`. O filtro por prefixo guardava só o cabeçalho e
+            // jogava fora justamente o corpo que se compara entre os dois
+            // lados. Sobrou um diário com o índice e sem o livro.
+            bool nossa = texto.StartsWith("[WithFriends");
+            bool continuacao = ultimaFoiNossa && (texto.StartsWith(" ") || texto.StartsWith("\t"));
+
+            if (!nossa && !continuacao) { ultimaFoiNossa = false; return; }
+            ultimaFoiNossa = true;
+        }
+
+        string linha = $"{DateTime.Now:HH:mm:ss.fff} {nivel} {texto}";
+
+        lock (Trava)
+        {
+            if (arquivo == null)
+            {
+                // Antes de abrir, guarda — mas com teto: se o diário nunca
+                // abrir, isto não pode virar um vazamento silencioso.
+                if (Antecipadas.Count < 2000) Antecipadas.Add(linha);
+                return;
+            }
+
+            try { arquivo.WriteLine(linha); }
+            catch { /* disco cheio, arquivo removido: o jogo não para por isso */ }
+        }
+    }
+
+    // O `Log` do Verse é o funil de tudo: remendar a fonte cobre todos os
+    // chamadores, inclusive os do próprio jogo (ADR 0015).
+    //
+    // Os tipos do parâmetro são obrigatórios: `Log.Message` tem duas
+    // sobrecargas (`string` e `object`), e sem dizer qual o Harmony recusa a
+    // classe inteira — as três gravações junto. A de `object` chama a de
+    // `string`, então esta cobre as duas.
+    [HarmonyPatch(typeof(Log), nameof(Log.Message), typeof(string)), HarmonyPostfix]
+    public static void DepoisDaMensagem(string text) => Escrever("msg", text);
+
+    [HarmonyPatch(typeof(Log), nameof(Log.Warning), typeof(string)), HarmonyPostfix]
+    public static void DepoisDoAviso(string text) => Escrever("AVISO", text);
+
+    [HarmonyPatch(typeof(Log), nameof(Log.Error), typeof(string)), HarmonyPostfix]
+    public static void DepoisDoErro(string text) => Escrever("ERRO", text);
+}

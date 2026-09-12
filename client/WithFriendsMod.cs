@@ -35,6 +35,11 @@ public class WithFriendsMod : Mod
         Harmony = new Harmony(PackageId);
         RemendarTudo();
 
+        // O diário abre logo depois dos remendos — ele **é** um remendo no
+        // `Log`, então antes disso não haveria o que gravar. As linhas da carga
+        // ficam guardadas e caem no arquivo assim que ele abre.
+        Session.DiarioDaInstancia.Abrir(Settings.PlayerIdOuNovo());
+
         // Efeitos visuais e sonoros não podem mover o estado compartilhado.
         // São dezenas de métodos, então o remendo é em lote (ADR 0012).
         Session.EfeitosNaoDeterministicos.Instalar(Harmony);

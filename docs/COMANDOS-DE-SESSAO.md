@@ -35,10 +35,113 @@ numa visita de ajuda humanitária. Fora do escopo até prova em contrário.
 | `Velocidade` | `TickManager.CurTimeSpeed` | um lado em Superfast: evento de 123 sorteios com um tick de diferença |
 | `Alistar` | `Pawn_DraftController.Drafted` | +4 sorteios no tick do clique, +111 dois ticks depois |
 | `OrdemDeTrabalho` | `Pawn_JobTracker.TryTakeOrderedJob` | **todo clique-direito passa aqui** |
+| `OrdemPriorizada` | `Pawn_JobTracker.TryTakeOrderedJobPrioritizedWork` | o chamador escreve DEPOIS da ordem (abaixo) |
+| `Alternar` | qualquer propriedade `bool` registrada | segurar fogo, proibir |
+| `Estoque` | `StorageSettings.Priority` + os 8 mutadores de `ThingFilter` | material fora de estoque não gera trabalho (abaixo) |
 
 O terceiro é o de maior alcance: uma intercepção cobre mover, atacar, carregar,
-resgatar, priorizar trabalho — praticamente tudo o que um jogador faz numa
-visita. O Multiplayer chega à mesma conclusão e sincroniza o mesmo método.
+resgatar, lançar poder — praticamente tudo o que um jogador faz numa visita. O
+Multiplayer chega à mesma conclusão e sincroniza o mesmo método.
+
+### Interceptar o que é chamado não cobre o que o chamador faz com a resposta
+
+`TryTakeOrderedJobPrioritizedWork` parecia coberto de graça, porque chama
+`TryTakeOrderedJob` por dentro. Não estava:
+
+```csharp
+if (TryTakeOrderedJob(job, giver.def.tagToGive)) {
+    job.workGiverDef = giver.def;
+    if (giver.def.prioritizeSustains)
+        pawn.mindState.priorityWork.Set(cell, giver.def);
+    return true;
+}
+```
+
+A nossa intercepção de dentro devolve "aceito" para a interface não mostrar
+recusa. O chamador acredita — e escreve essas duas coisas na máquina de quem
+clicou. `priorityWork` é estado de simulação. O outro lado não escreve nada.
+Divergência silenciosa, sem erro nenhum.
+
+É a segunda vez que essa forma aparece: a primeira foi `TogglePaused` escrevendo
+`curTimeSpeed` por baixo da propriedade que remendamos. **Remendar a fonte cobre
+os chamadores dela, não o que eles fazem depois.**
+
+### `Alternar`: um tipo, muitas chaves
+
+O Multiplayer registra uma linha por propriedade — `FireAtWill`, `Forbidden`,
+`StorageSettings.Priority` e mais umas dezenas. São todas a mesma forma: uma
+coisa do mapa, um nome, um valor `bool`. Um tipo de comando por linha dessas
+seriam oito trocas de protocolo para oito booleanos.
+
+Então o protocolo carrega `(coisa, chave, valor)` e quem sabe o que a chave quer
+dizer é o registro em `AlternaveisDeSessao`. A próxima custa uma entrada e um
+remendo no setter — protocolo intacto, teste de ida e volta intacto.
+
+O que **não** cabe nele: botão cuja ação é um closure escrevendo direto no campo
+privado, sem propriedade nenhuma no caminho. "Manter aberta" da porta é assim
+(`holdOpenInt`, escrito de dentro do `Command_Toggle`). Não há fonte para
+remendar — e é por isso que o Multiplayer tem 227 registros de lambda além dos
+305 de método: para cada um desses é preciso identificar o closure.
+
+### Estoque: sincronizar o estado, não a operação
+
+Apareceu caçando "o menu de priorizar não aparece". A causa era regra do jogo —
+material fora de estoque não gera trabalho, e sem trabalho não há o que
+priorizar. Mas isso quer dizer que **a configuração do estoque decide o que a
+simulação faz**, e ela estava inteiramente fora da sessão. Um jogador permitir
+aço num estoque muda o que os pawns dos dois lados fazem no tick seguinte.
+
+`ThingFilter` tem oito mutadores, vários com parâmetros que não atravessam a rede
+de graça: listas de exceção, um filtro-pai inteiro. O Multiplayer sincroniza a
+interação com o widget e precisa de marcadores de contexto (`ThingFilterMarkers`,
+`ThingFilterContexts`) só para saber de quem é o filtro que está sendo mexido.
+
+Nós fazemos o contrário: deixamos a interface **calcular** o resultado, lemos o
+estado, **desfazemos** o efeito local e mandamos o estado inteiro — quais defs
+valem agora, quais filtros especiais estão desligados, as duas faixas.
+
+| | operação | estado |
+|---|---|---|
+| mutadores cobertos | um registro cada | todos, de uma vez |
+| widget novo (ou de mod) | precisa de registro | já coberto |
+| dois comandos fora de ordem | meio-termo que ninguém pediu | último vence, coerente |
+| bytes | poucos | centenas de nomes de def no pior caso |
+
+O pior caso ("permitir tudo") são uns 20 KB. É comando de jogador, não de tick.
+
+**Em aberto:** hoje o visitante pode mexer no estoque do anfitrião, como pode
+designar. Coerente com §4 (designar fica com o visitante porque ele precisa erguer
+barricada), mas estoque é mais "arrumação da casa" que "defesa" — vale decidir de
+propósito, não por omissão.
+
+**Falta ainda nesta frente:** zonas de crescimento (`Zone_Growing.PlantDefToGrow`),
+apagar zona (`Zone.Delete`), áreas (`Area.Invert`, `Area.Delete`,
+`AreaManager.TryMakeNewAllowed`) e a restrição de área do pawn
+(`Pawn_PlayerSettings.AreaRestrictionInPawnCurrentMap`). Criar e expandir zona já
+é comando, porque é designador.
+
+## O buraco maior não é comando novo: é o payload da ordem
+
+`Job.ExposeData` tem ~65 campos. Nós carregamos 9.
+
+O que fica de fora e dói numa visita de combate:
+
+| Campo | O que quebra |
+|---|---|
+| `verbToUse` | poderes e psicastes: o job chega sem o verbo |
+| `ability` | idem |
+| `targetQueueA` / `targetQueueB` / `countQueue` | ordens de vários alvos, ingredientes |
+| `workGiverDef` | ver `OrdemPriorizada` acima |
+
+O Multiplayer não enumera campo nenhum: `.ExposeParameter(0)` serializa o `Job`
+pelo `Scribe` do próprio jogo (`ScribeUtil.WriteExposable`), o mesmo caminho do
+save. Todos os campos viajam, inclusive os que a Ludeon acrescentar na próxima
+versão e os que um mod acrescentar hoje.
+
+O preço é resolver referências (`Scribe_References.Look(ref verbToUse, …)`) fora
+de um carregamento de save: eles mantêm um `SharedCrossRefs` (50 linhas, mais
+remendos que o alimentam conforme as coisas nascem e morrem). É o próximo passo
+grande desta frente, e vale mais que qualquer comando novo da lista abaixo.
 
 ## O que vem depois, por ordem de probabilidade numa visita
 
@@ -46,10 +149,9 @@ Extraído da lista deles, filtrado pelo que uma visita de ajuda ou combate usa:
 
 | Membro do jogo | O que quebra sem ele |
 |---|---|
-| `Pawn_JobTracker.TryTakeOrderedJobPrioritizedWork` | "priorizar trabalho" (clique com Ctrl) |
-| `Pawn_DraftController.FireAtWill` | alternar fogo à vontade |
 | `Building_TurretGun.OrderAttack` | mandar torre atacar alvo |
 | `Pawn_WorkSettings.SetPriority` | mexer nas prioridades de trabalho |
+| `Building_Door` "manter aberta" | closure, sem fonte para remendar |
 | `PawnColumnWorker_FollowDrafted.SetValue` | animal seguir quando alistado |
 | `Designator_*` (via `DesignationConfirmed`) | marcar para caçar, desconstruir, colher |
 | `Pawn_TrainingTracker.SetWantedRecursive` | treinar animal |

@@ -53,7 +53,20 @@ public static class VisitaEmAndamento
     {
         JogoDeOrigem = Current.Game;
         Inicio = inicio;
-        HashPreSessao = hashPreSessao;
+
+        // **O ponto de retorno nunca é apagado por uma travessia nova.**
+        //
+        // Esta função passou a ser chamada duas vezes: no bootstrap e de novo a
+        // cada ponto de junção refeito (ressincronização). Na segunda vez, quem
+        // chama está **dentro** da partida do anfitrião, e o congelador de lá
+        // não conhece hash nenhum — passaria `null`.
+        //
+        // Apagar aqui seria apagar o caminho de volta para a colônia do
+        // visitante. Perder o encontro é aceitável; perder a colônia não é
+        // (§2.3), e a ressincronização existe justamente para não perder nem
+        // um nem outro.
+        if (hashPreSessao != null) HashPreSessao = hashPreSessao;
+
         SaveDaVisita = saveDaVisita;
         SouVisitante = souVisitante;
         Retomada = false;

@@ -364,6 +364,72 @@ public static class DebugActions
         allowedGameStates = AllowedGameStates.Playing)]
     public static void EncerrarSessao() => Sessao?.PedirEncerramento();
 
+    /// <summary>
+    /// Por que "Priorizar…" não aparece para o pawn selecionado, na coisa sob o
+    /// cursor.
+    ///
+    /// <para>Duas vezes seguidas eu suspeitei do mod e a causa era regra do
+    /// jogo: alistado não recebe a opção, e sem material alcançável o blueprint
+    /// também não gera trabalho. Adivinhar sai caro — esta ação refaz o mesmo
+    /// laço do <c>FloatMenuOptionProvider_WorkGivers</c> e diz, para cada
+    /// doador de trabalho, qual porta fechou.</para>
+    /// </summary>
+    [DebugAction("WithFriends", "Por que não dá para priorizar aqui?",
+        allowedGameStates = AllowedGameStates.PlayingOnMap)]
+    public static void PorQueNaoPrioriza()
+    {
+        var pawn = Find.Selector.SelectedPawns.FirstOrDefault();
+        if (pawn == null) { Log.Message("[WithFriends] selecione um pawn primeiro."); return; }
+
+        var celula = UI.MouseCell();
+        var coisas = celula.GetThingList(pawn.Map);
+        var alvo = coisas.FirstOrDefault(c => c.def.selectable) ?? coisas.FirstOrDefault();
+
+        var linhas = new System.Text.StringBuilder();
+        linhas.AppendLine(
+            $"[WithFriends] por que {pawn.LabelShort} não prioriza em {celula} " +
+            $"(alvo: {alvo?.LabelShort ?? "célula vazia"}):");
+        linhas.AppendLine($"  alistado: {pawn.Drafted} " +
+                          "(alistado só recebe doadores com canBeDoneWhileDrafted)");
+
+        foreach (var tipo in DefDatabase<WorkTypeDef>.AllDefsListForReading)
+        foreach (var doadorDef in tipo.workGiversByPriority)
+        {
+            if (doadorDef.Worker is not WorkGiver_Scanner scanner) continue;
+            if (!scanner.def.directOrderable) continue;
+
+            string porque;
+            try
+            {
+                if (pawn.Drafted && !doadorDef.canBeDoneWhileDrafted) porque = "pawn alistado";
+                else if (pawn.workSettings?.GetPriority(tipo) == 0) porque = "tipo de trabalho desligado neste pawn";
+                else
+                {
+                    Verse.AI.JobFailReason.Clear();
+                    bool tem = alvo != null
+                        ? !scanner.ShouldSkip(pawn, true) && scanner.HasJobOnThing(pawn, alvo, true)
+                        : !scanner.ShouldSkip(pawn, true) && scanner.HasJobOnCell(pawn, celula, true);
+
+                    porque = tem
+                        ? "TEM TRABALHO — a opção deveria aparecer"
+                        : Verse.AI.JobFailReason.HaveReason
+                            ? $"sem trabalho: {Verse.AI.JobFailReason.Reason}"
+                            : "sem trabalho (sem motivo declarado — é o caso que some do menu em silêncio)";
+                }
+            }
+            catch (System.Exception e) { porque = $"EXCEÇÃO: {e.Message}"; }
+
+            // Só o que interessa: o silêncio total polui, e o que se procura é
+            // o doador que deveria ter dado trabalho.
+            if (porque.StartsWith("TEM TRABALHO") || porque.StartsWith("EXCEÇÃO") ||
+                porque.StartsWith("sem trabalho: "))
+                linhas.AppendLine($"  {doadorDef.defName}: {porque}");
+        }
+
+        linhas.AppendLine("  (doadores sem motivo declarado foram omitidos — são a maioria e é normal)");
+        Log.Message(linhas.ToString());
+    }
+
     [DebugAction("WithFriends", "Retrato da partida",
         allowedGameStates = AllowedGameStates.Playing)]
     public static void Retrato() => Session.RetratoDaPartida.Registrar("sob demanda");
