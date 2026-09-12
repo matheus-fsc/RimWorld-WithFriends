@@ -623,7 +623,14 @@ public sealed class SessaoCliente
         TickDeSessao = inicio.TickInicial;
         TickLiberado = inicio.TickInicial;
         agenda.Clear();
-        visitaComecou = false;
+
+        // Uma visita que já começou continua começada do outro lado do
+        // recarregamento. Zerar aqui travava a ressincronização: a barreira
+        // volta pausada e não anda, `visitaComecou` nunca religava, e sem ele o
+        // clique no relógio não vira pedido — pausado para sempre, esperando
+        // uma liberação que dependia de despausar.
+        visitaComecou = VisitaEmAndamento.JaComecou;
+
         mapaDaVisita = Find.CurrentMap?.uniqueID ?? -1;
 
         relogio.LimitarAte(TickLiberado);
@@ -890,6 +897,7 @@ public sealed class SessaoCliente
         if (primeiraLiberacao)
         {
             visitaComecou = true;
+            VisitaEmAndamento.JaComecou = true;
             congelador.Descongelar();
             relogio.Retomar();
             ultimaVelocidade = Find.TickManager?.CurTimeSpeed ?? TimeSpeed.Normal;

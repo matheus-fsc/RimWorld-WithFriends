@@ -79,6 +79,22 @@ public static class VisitaEmAndamento
     /// </summary>
     public static bool EsperandoPontoDeJuncao { get; set; }
 
+    /// <summary>
+    /// A visita já começou de verdade alguma vez — a barreira já andou.
+    ///
+    /// <para>Mora aqui porque precisa atravessar o recarregamento do ponto de
+    /// junção, e porque sem isso a visita <b>trava</b>.</para>
+    ///
+    /// <para>O caminho: "começou" é ligado na primeira liberação da barreira
+    /// além do tick inicial. Desde que a ressincronização passou a voltar
+    /// pausada, a barreira não anda ao voltar — e `visitaComecou`, zerado por
+    /// `Retomar`, nunca mais ligava. Só que é ele que autoriza o clique no
+    /// relógio a virar pedido: com ele desligado, o jogador aperta espaço, o
+    /// log registra a intenção, e nada sai. Pausado para sempre, esperando uma
+    /// liberação que dependia de despausar.</para>
+    /// </summary>
+    public static bool JaComecou { get; set; }
+
     public static void Comecar(SessaoInicio inicio, string? hashPreSessao, string? saveDaVisita, bool souVisitante)
     {
         JogoDeOrigem = Current.Game;
@@ -143,6 +159,7 @@ public static class VisitaEmAndamento
     {
         UltimaRessincronizacao = 0;
         EsperandoPontoDeJuncao = false;
+        JaComecou = false;
 
         // A preferência é do jogador: fora da visita, volta a ser dele.
         Application.runInBackground = rodavaEmSegundoPlano;
