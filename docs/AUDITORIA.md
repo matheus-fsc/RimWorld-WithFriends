@@ -483,3 +483,61 @@ numa visita isso trava **os dois**, porque a barreira não anda com um lado
 congelado. Do lado de dentro é indistinguível de desconexão, e duas instâncias na
 mesma máquina (que é como se testa) nunca estão as duas em foco. Forçada durante
 a visita e devolvida no fim.
+
+
+## A primeira divergência achada pelo rastreio, e não por leitura
+
+Vale registrar inteira, porque é o primeiro caso em que o instrumento respondeu
+sozinho — e porque a leitura sozinha não teria achado.
+
+Comparando os dois diários de uma visita, o **histórico de RNG da sessão** deu o
+tick exato da primeira diferença:
+
+```
+tick 6130   A rng 63153   B rng 63152      ← um sorteio de diferença
+```
+
+O **rastreio por local de chamada**, no mesmo tick, deu a cadeia:
+
+```
+Pawn.TickInterval
+  < Pawn_HealthTracker.HealthTickInterval
+    < Pawn_HealthTracker.DropBloodSmear
+      < FilthMaker.TryMakeFilth
+        < GenSpawn.Spawn
+          < Filth.SpawnSetup
+            < FloatRange.RandomInRange  →  Rand.Range
+```
+
+E o jogo decide assim:
+
+```csharp
+if (pawn.Crawling && pawn.Spawned)
+    if (!lastSmearDropPos.HasValue ||
+        Vector3.Distance(pawn.DrawPos, lastSmearDropPos.Value) > …)
+        DropBloodSmear();
+```
+
+`DrawPos` é `PawnTweener.TweenedPos`: posição **de quadro**, interpolada com
+`RealTime.deltaTime`. Duas máquinas desenham em ritmos diferentes; uma janela em
+foco e outra não, ainda mais. O pawn que rasteja sangrando larga sangue em
+lugares diferentes nos dois lados — e sangue é `Filth`, estado salvo, cujo
+sorteio de espessura desloca o gerador da sessão para sempre.
+
+Explica o padrão inteiro: divergia em **combate** (búfalos, mecanoides, insetos,
+tiro em construção) e nunca construindo, movendo ou mexendo em estoque. Combate é
+o que derruba pawn, e pawn derrubado rasteja e sangra. E explica por que
+ressincronizar não resolvia: os dois voltavam iguais e continuavam desenhando em
+ritmos diferentes.
+
+### O que isso diz sobre o método
+
+`PawnTweener.TweenedPos` estava na lista de guardas do Multiplayer por portar
+**desde o começo**, e apareceu na interseção `[visita] × [MP]` da alcançabilidade.
+Ou seja: a lista cruzada já apontava para ele, e mesmo assim eu o deixei para
+depois por três rodadas, caçando hipóteses.
+
+A lição não é "leia a lista". É que a lista dá **candidatos** e o rastreio dá
+**evidência** — e sem evidência não dá para ordenar candidatos, porque todos
+parecem plausíveis. O que faltava não era saber que `TweenedPos` é local; era
+saber que era *ele*, naquele tick, por aquela cadeia.
