@@ -123,6 +123,14 @@ public static class CachesDeCombateForaDaInterface
         catch (Exception) { return null; }
     }
 
+    /// <summary>
+    /// <c>CacheStatus.Uncached</c> — o único estado em que desfazer é seguro.
+    ///
+    /// <para>O enum tem três valores: <c>Uncached</c>, <c>Caching</c>,
+    /// <c>Cached</c>. Só interessa o primeiro.</para>
+    /// </summary>
+    const int NaoCacheado = 0;
+
     public static (bool guardou, object? status, object? valor) AntesDaCapacidade(
         PawnCapacitiesHandler tratador, PawnCapacityDef capacidade)
     {
@@ -131,7 +139,24 @@ public static class CachesDeCombateForaDaInterface
         object? elemento = Elemento(tratador, capacidade);
         if (elemento == null) return default;
 
-        return (true, CampoStatus.GetValue(elemento), CampoValor.GetValue(elemento));
+        object? status = CampoStatus.GetValue(elemento);
+
+        // **Só a chamada que COMEÇA um cálculo.**
+        //
+        // `GetLevel` é reentrante: calcular uma capacidade pergunta outras, e
+        // durante isso o elemento fica em `Caching`. Guardar e devolver esse
+        // estado transitório deixava a capacidade presa em `Caching` para
+        // sempre — e daí em diante o jogo respondia:
+        //
+        //     Detected infinite stat recursion when evaluating {capacity}
+        //     return 0f;
+        //
+        // Capacidade zero é pawn incapaz: sumiram opções do menu de interação e
+        // a tela piscava com o erro. Já em `Cached`, a interface só leu e não há
+        // rastro a desfazer.
+        if (status == null || (int)status != NaoCacheado) return default;
+
+        return (true, status, CampoValor.GetValue(elemento));
     }
 
     public static void DepoisDaCapacidade(
