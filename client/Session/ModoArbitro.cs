@@ -78,6 +78,44 @@ public static class ModoArbitro
 }
 
 /// <summary>
+/// O árbitro carrega a colônia dele sozinho.
+///
+/// <para>Aceitar uma visita exige estar <b>dentro de uma partida</b>: o
+/// visitante congela a própria colônia, cria o ponto de retorno e publica o
+/// assentamento dele. Uma instância em <c>-batchmode</c> sobe no menu principal
+/// e ficaria ali para sempre.</para>
+///
+/// <para>Então <c>-arbitrosave=NOME</c> diz qual save abrir. Deve ser a colônia
+/// do visitante humano — mesmo planeta, mesma semente — senão o coordenador
+/// recusa com "planeta divergente" e o experimento nem começa.</para>
+/// </summary>
+[HarmonyPatch(typeof(MainMenuDrawer), nameof(MainMenuDrawer.MainMenuOnGUI))]
+public static class ArbitroCarregaSozinho
+{
+    static bool jaTentou;
+
+    [HarmonyPostfix]
+    public static void Depois()
+    {
+        if (!ModoArbitro.Ativo || jaTentou) return;
+        jaTentou = true;
+
+        if (!GenCommandLine.TryGetCommandLineArg("arbitrosave", out string nome) ||
+            string.IsNullOrWhiteSpace(nome))
+        {
+            Log.Warning(
+                "[WithFriends] modo árbitro sem -arbitrosave=NOME: não há colônia para " +
+                "entrar na visita, e esta instância não vai fazer nada.");
+            return;
+        }
+
+        Log.Message($"[WithFriends] árbitro abrindo a colônia \"{nome}\"…");
+        LongEventHandler.QueueLongEvent(
+            () => GameDataSaveLoader.LoadGame(nome), "LoadingLongEvent", true, null);
+    }
+}
+
+/// <summary>
 /// Sem interface gráfica, a <c>GUISkin</c> não existe e o jogo estoura ao
 /// desenhar. Um esqueleto vazio basta — nada vai ser visto.
 /// </summary>

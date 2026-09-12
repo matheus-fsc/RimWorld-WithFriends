@@ -82,6 +82,19 @@ public sealed class ClienteCoordenador : IDisposable
     /// </summary>
     public bool Enviar(IMessage mensagem)
     {
+        // **Árbitro não dá ordem.**
+        //
+        // Ele existe para simular e comparar digitais; um comando saindo dali
+        // seria uma terceira vontade numa visita de dois. Em tese ele nem
+        // geraria — não há interface para clicar — mas "em tese" é frágil demais
+        // para o papel de referência: se ele mandar comando, ele deixa de ser
+        // referência e vira participante.
+        if (Session.ModoArbitro.Ativo && mensagem.Id == MessageId.SessaoComando)
+        {
+            Log.Warning("[WithFriends] árbitro tentou propor um comando — recusado.");
+            return false;
+        }
+
         if (Estado is not (EstadoConexao.Conectado or EstadoConexao.Conectando))
         {
             Log.Warning($"[WithFriends] {mensagem.Id} não enviada: sem conexão (estado: {Estado}).");

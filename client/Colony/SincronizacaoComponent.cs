@@ -131,7 +131,10 @@ public class SincronizacaoComponent : GameComponent
     /// </summary>
     static void TentarConectarSozinho(Net.ClienteCoordenador cliente)
     {
-        if (!WithFriendsMod.Settings.conectarAoIniciar) return;
+        // O árbitro sempre conecta: a instância dele existe só para isso, e
+        // depender de uma preferência gravada no perfil seria uma forma boba de
+        // ele subir e não fazer nada.
+        if (!WithFriendsMod.Settings.conectarAoIniciar && !Session.ModoArbitro.Ativo) return;
         if (cliente.Estado is EstadoConexao.Conectado or EstadoConexao.Conectando) return;
         if (Time.realtimeSinceStartup < proximaTentativa) return;
 

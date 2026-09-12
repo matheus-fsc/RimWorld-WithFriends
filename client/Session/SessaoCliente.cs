@@ -258,6 +258,16 @@ public sealed class SessaoCliente
         }
 
         ConvitePendente = convite;
+
+        // O árbitro aceita sozinho: ele existe para entrar na visita e comparar
+        // digitais, e não há ninguém na frente daquela instância para clicar.
+        if (ModoArbitro.Ativo)
+        {
+            Log.Message($"[WithFriends] árbitro aceitando o convite {convite.ConviteId} automaticamente.");
+            Aceitar();
+            return;
+        }
+
         Find.LetterStack.ReceiveLetter(
             "With Friends: convite de sessão",
             $"{convite.De} convidou você para: {convite.Tipo}.\n\n" +
