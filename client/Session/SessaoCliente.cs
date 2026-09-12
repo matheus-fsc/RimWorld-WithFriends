@@ -504,6 +504,7 @@ public sealed class SessaoCliente
         VisitaEmAndamento.UltimaRessincronizacao = pedido.Numero;
 
         Estado = EstadoSessaoLocal.Ressincronizando;
+        VisitaEmAndamento.EsperandoPontoDeJuncao = true;
         agenda.Clear();
 
         Log.Warning(
@@ -777,6 +778,16 @@ public sealed class SessaoCliente
     {
         if (!visitaComecou || Find.TickManager == null) return;
 
+        // Enquanto o ponto de junção não fecha, o relógio fica parado e o clique
+        // do jogador não conta: não há o que acelerar antes de o outro lado
+        // existir de novo.
+        if (VisitaEmAndamento.EsperandoPontoDeJuncao)
+        {
+            ControleDeVelocidade.Consumir();
+            relogio.Pausar();
+            return;
+        }
+
         // Intenção, não diferença de estado. Apertar 2 com o relógio local já
         // em 2 continua sendo um pedido — e era justamente esse caso que se
         // perdia, fazendo a tecla "funcionar só às vezes".
@@ -787,10 +798,38 @@ public sealed class SessaoCliente
         mudouVelocidade = true;
     }
 
+    /// <summary>
+    /// Depois de refazer o ponto de junção, este lado espera o coordenador dizer
+    /// que os <b>dois</b> voltaram.
+    ///
+    /// <para>Quem termina de recarregar primeiro — quase sempre o anfitrião, que
+    /// não precisa esperar a partida chegar pela rede — volta com o relógio
+    /// refletindo a velocidade acordada de <b>antes</b> da divergência. O jogo
+    /// dele despausa sozinho enquanto o outro ainda está na tela de
+    /// carregamento.</para>
+    ///
+    /// <para>A barreira impede que ele simule, então o relógio andando é mentira
+    /// da interface — mas é mentira que engana quem está jogando e que esconde a
+    /// única pergunta que importa naquele instante: o outro já voltou?</para>
+    ///
+    /// <para>A espera mora em <see cref="VisitaEmAndamento"/>, que atravessa o
+    /// recarregamento; num campo daqui ela nasceria zerada do outro lado da
+    /// troca de partida.</para>
+    /// </summary>
     public void Barreira(SessaoBarreira barreira)
     {
         if (TrocandoDePartida) return;
         if (Atual == null || barreira.SessaoId != Atual.SessaoId) return;
+
+        // Barreira de verdade só chega quando os **dois** voltaram do ponto de
+        // junção: enquanto falta alguém, o coordenador responde outra coisa.
+        // Então a chegada desta mensagem é o sinal de que a espera acabou.
+        if (VisitaEmAndamento.EsperandoPontoDeJuncao)
+        {
+            VisitaEmAndamento.EsperandoPontoDeJuncao = false;
+            Log.Message(
+                "[WithFriends] ponto de junção fechado — os dois lados voltaram, a visita continua.");
+        }
 
         bool primeiraLiberacao = TickLiberado <= Atual.TickInicial && barreira.TickLiberado > Atual.TickInicial;
 

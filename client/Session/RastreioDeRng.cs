@@ -65,22 +65,7 @@ public static class RastreioDeRng
 
     static bool medindo;
 
-    public static bool Ativo => medindo || (Ligado && RngDeSessao.Ativo);
-
-    /// <summary>
-    /// Sorteios feitos **fora** do tick, por local de chamada.
-    ///
-    /// <para>O rastreio só olhava dentro do tick — e era justamente isso que
-    /// escondia a suspeita mais forte. O <c>Rand</c> do RimWorld é um gerador
-    /// global: um sorteio feito entre dois ticks, por um alerta ou por um
-    /// desenho, anda com o estado sem que a simulação tenha andado, e os dois
-    /// lados divergem sem que nada no jogo esteja diferente.</para>
-    ///
-    /// <para>Sem dimensão de tick de propósito: o que se quer saber é **quem**
-    /// sorteia fora do tick, e a resposta é a mesma o tempo todo. Comparar os
-    /// dois diários mostra na hora se é a interface de um dos lados.</para>
-    /// </summary>
-    static readonly Dictionary<long, int> foraDoTick = new();
+    public static bool Ativo => medindo || (Ligado && RngDeSessao.Ativo && NaInterface.Tickando);
 
     /// <summary>
     /// Mede quanto custa capturar um local de chamada, agora.
@@ -143,7 +128,6 @@ public static class RastreioDeRng
         ordem.Clear();
         porTick.Clear();
         nomes.Clear();
-        foraDoTick.Clear();
         cronometro.Reset();
         sorteios = 0;
         tickAtual = -1;
@@ -159,16 +143,6 @@ public static class RastreioDeRng
         cronometro.Start();
         try
         {
-            if (!NaInterface.Tickando)
-            {
-                // Fora do tick: não pertence a passo nenhum, e misturá-lo com os
-                // sorteios de simulação estragaria a comparação por tick.
-                var deFora = Capturar();
-                foraDoTick.TryGetValue(deFora, out var quantos);
-                foraDoTick[deFora] = quantos + 1;
-                return;
-            }
-
             if (!porTick.TryGetValue(tickAtual, out var contagens))
             {
                 porTick[tickAtual] = contagens = new Dictionary<long, int>();
@@ -190,34 +164,22 @@ public static class RastreioDeRng
     }
 
     /// <summary>
-    /// Quem sorteou fora do tick, e quantas vezes.
+    /// Quantos sorteios aconteceram fora do tick.
     ///
-    /// <para>Se os dois diários mostrarem listas diferentes aqui, a divergência
-    /// não é de simulação: é a interface de um dos lados consumindo o gerador
-    /// compartilhado. O conserto então não é mais um guarda por método — é
-    /// isolar o gerador da interface.</para>
+    /// <para><b>Só a contagem, não o local.</b> Capturar a pilha custa ~116 µs.
+    /// Dentro do tick isso cabe: são dezenas de sorteios por tick. Fora dele é
+    /// desenho, e desenho sorteia milhares de vezes por quadro — quando tentei
+    /// capturar todos, o jogo travou a ponto de precisar matar o processo.</para>
+    ///
+    /// <para>A contagem sozinha já responde a pergunta que importa: se os dois
+    /// lados tiverem números diferentes, a interface está consumindo o gerador
+    /// compartilhado, e o conserto não é mais um guarda por método — é isolar o
+    /// gerador da interface.</para>
     /// </summary>
-    public static void DespejarForaDoTick()
-    {
-        if (foraDoTick.Count == 0)
-        {
-            Log.Message("[WithFriends] nenhum sorteio fora do tick — a interface não mexeu no Rand.");
-            return;
-        }
-
-        var texto = new StringBuilder();
-        texto.AppendLine(
-            $"[WithFriends] sorteios FORA do tick por local ({ContadorDeSorteios.ForaDoTick} no total):\n" +
-            "  (lista diferente entre os dois lados = a interface está consumindo o Rand compartilhado)");
-
-        foreach (var par in foraDoTick
-                     .Select(p => (nome: nomes.TryGetValue(p.Key, out var n) ? n : "(desconhecido)", p.Value))
-                     .OrderByDescending(p => p.Value)
-                     .ThenBy(p => p.nome, StringComparer.Ordinal))
-            texto.AppendLine($"      {par.Value,6}x  {par.nome}");
-
-        Log.Message(texto.ToString());
-    }
+    public static void DespejarForaDoTick() =>
+        Log.Message(
+            $"[WithFriends] sorteios fora do tick: {ContadorDeSorteios.ForaDoTick}\n" +
+            "  (número diferente entre os dois lados = a interface está consumindo o Rand)");
 
     /// <summary>
     /// Identifica o local de chamada <b>sem tocar em metadado</b>.
@@ -316,8 +278,6 @@ public static class RastreioDeRng
                 "  Ligue com a debug action \"Rastrear RNG da sessão\" nos DOIS jogos e refaça a visita.");
             return;
         }
-
-        DespejarForaDoTick();
 
         long inicio = tickDoAborto - ticksAntes;
         long fim = tickDoAborto + ticksDepois;

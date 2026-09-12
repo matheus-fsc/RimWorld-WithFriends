@@ -67,6 +67,18 @@ public static class VisitaEmAndamento
     /// </summary>
     public static int UltimaRessincronizacao { get; set; }
 
+    /// <summary>
+    /// Este lado já voltou do ponto de junção e espera o coordenador dizer que o
+    /// outro também voltou.
+    ///
+    /// <para>Mora aqui pelo mesmo motivo que <see cref="UltimaRessincronizacao"/>:
+    /// o componente de sessão morre no recarregamento, e é depois dele que a
+    /// espera acontece. Num campo da sessão, a espera nasceria zerada do outro
+    /// lado da troca de partida — e o relógio despausaria na hora, que é
+    /// exatamente o que se quer impedir.</para>
+    /// </summary>
+    public static bool EsperandoPontoDeJuncao { get; set; }
+
     public static void Comecar(SessaoInicio inicio, string? hashPreSessao, string? saveDaVisita, bool souVisitante)
     {
         JogoDeOrigem = Current.Game;
@@ -130,6 +142,7 @@ public static class VisitaEmAndamento
     public static void Limpar()
     {
         UltimaRessincronizacao = 0;
+        EsperandoPontoDeJuncao = false;
 
         // A preferência é do jogador: fora da visita, volta a ser dele.
         Application.runInBackground = rodavaEmSegundoPlano;
