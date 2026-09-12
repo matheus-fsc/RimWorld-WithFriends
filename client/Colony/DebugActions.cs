@@ -430,6 +430,10 @@ public static class DebugActions
         Log.Message(linhas.ToString());
     }
 
+    [DebugAction("WithFriends", "Quem sorteia fora do tick",
+        allowedGameStates = AllowedGameStates.Playing)]
+    public static void SorteiosForaDoTick() => Session.RastreioDeRng.DespejarForaDoTick();
+
     [DebugAction("WithFriends", "Retrato da partida",
         allowedGameStates = AllowedGameStates.Playing)]
     public static void Retrato() => Session.RetratoDaPartida.Registrar("sob demanda");
