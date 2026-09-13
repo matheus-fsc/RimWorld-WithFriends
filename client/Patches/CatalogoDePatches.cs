@@ -253,6 +253,13 @@ public static class CatalogoDePatches
         },
         new AlvoDePatch
         {
+            Tipo = typeof(Verse.AI.Pawn_JobTracker),
+            Membro = nameof(Verse.AI.Pawn_JobTracker.EndCurrentJob),
+            Recurso = "encerrar job dentro de sessão",
+            Motivo = "o \"ir aqui\" dos alistados encerra o Goto direto da interface, sem passar por TryTakeOrderedJob",
+        },
+        new AlvoDePatch
+        {
             Tipo = typeof(GenView),
             Membro = nameof(GenView.ShouldSpawnMotesAt),
             Recurso = "determinismo de efeitos visuais em sessão",

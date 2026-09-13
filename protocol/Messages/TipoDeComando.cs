@@ -100,6 +100,37 @@ public enum TipoDeComando : byte
     /// def. É comando raro e de jogador, não de tick.</para>
     /// </summary>
     Estoque = 9,
+
+    /// <summary>
+    /// Encerrar o job atual de um pawn — o outro jeito de o jogador mandar,
+    /// e o que faltava.
+    ///
+    /// <para>Toda ordem manual passava por <c>TryTakeOrderedJob</c>, que já era
+    /// comando. Mas a ordem de ir a pé tem um caminho que não passa por lá:</para>
+    ///
+    /// <code>
+    /// // FloatMenuOptionProvider_DraftedMove.PawnGotoAction
+    /// if (pawn.Position == gotoLoc) {
+    ///     if (pawn.CurJobDef == JobDefOf.Goto)
+    ///         pawn.jobs.EndCurrentJob(JobCondition.Succeeded);   // direto, na interface
+    /// }
+    /// </code>
+    ///
+    /// <para>Arrastar o marcador de "ir aqui" até a célula onde o colono já
+    /// está encerra o <c>Goto</c> dele <b>na hora e só na máquina de quem
+    /// clicou</b>. O outro lado continua andando, e a partir do tick seguinte
+    /// são duas simulações.</para>
+    ///
+    /// <para>Foi assim que apareceu, com a pilha de chamada no rastreio:</para>
+    ///
+    /// <code>
+    /// passo 580 #68 Fitz: job Goto encerrado: Succeeded
+    ///   &lt; FloatMenuOptionProvider_DraftedMove.PawnGotoAction
+    ///   &lt; MultiPawnGotoController.IssueGotoJobs
+    ///   &lt; Selector.HandleMapClicks &lt; MapInterface.HandleLowPriorityInput
+    /// </code>
+    /// </summary>
+    EncerrarJob = 10,
 }
 
 /// <summary>

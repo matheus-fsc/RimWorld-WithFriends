@@ -67,6 +67,25 @@ public static class ComandoDeSessao
     }
 
     /// <summary>
+    /// Encerrar o job atual de um pawn.
+    ///
+    /// <para>Vai o nome do def do job que se quer encerrar, e não só o pawn: o
+    /// comando chega alguns ticks depois, e nesse meio-tempo o pawn pode já ter
+    /// outro job. Encerrar o job errado é pior do que não encerrar nada — na
+    /// aplicação, se o def não bater, o comando não faz nada e diz isso.</para>
+    /// </summary>
+    public static byte[] EncerrarJob(int pawnId, JobCondition condicao, string defDoJob)
+    {
+        using var ms = new MemoryStream();
+        using var w = new BinaryWriter(ms);
+        w.Write((byte)TipoDeComando.EncerrarJob);
+        w.Write(pawnId);
+        w.Write((int)condicao);
+        w.Write(defDoJob);
+        return ms.ToArray();
+    }
+
+    /// <summary>
     /// "Priorizar este trabalho": a ordem, mais as duas coisas que o chamador
     /// escreve **depois** de a ordem ser aceita.
     ///
@@ -365,6 +384,29 @@ public static class ComandoDeSessao
 
                 pawn.jobs.TryTakeOrderedJob(job, tag, enfileirar);
                 return $"{pawn.LabelShort} → {job.def.defName}";
+            }
+
+            case TipoDeComando.EncerrarJob:
+            {
+                using var ms = new MemoryStream(payload, writable: false);
+                using var r = new BinaryReader(ms);
+                r.ReadByte();
+
+                int pawnId = r.ReadInt32();
+                var condicao = (JobCondition)r.ReadInt32();
+                string defEsperado = r.ReadString();
+
+                var pawn = Encontrar(pawnId);
+                if (pawn?.jobs == null) return $"pawn {pawnId} não encontrado";
+
+                // O job de agora tem que ser o que o jogador viu quando mandou.
+                string defAgora = pawn.CurJobDef?.defName ?? "";
+                if (defAgora != defEsperado)
+                    return $"{pawn.LabelShort}: job já é {(defAgora.Length > 0 ? defAgora : "nenhum")}, " +
+                           $"não {defEsperado} — encerramento ignorado";
+
+                pawn.jobs.EndCurrentJob(condicao);
+                return $"{pawn.LabelShort}: {defEsperado} encerrado ({condicao})";
             }
 
             case TipoDeComando.OrdemPriorizada:
