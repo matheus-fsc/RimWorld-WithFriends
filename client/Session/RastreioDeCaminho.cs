@@ -209,6 +209,75 @@ public static class ContaDoTickFechada
 }
 
 /// <summary>
+/// Por que o job acabou — o fato que faltava.
+///
+/// <para>Numa divergência real, o job de <c>Goto</c> de três colonos acabou de
+/// um lado e não do outro, no mesmo tick em que começou. E nem
+/// <c>PatherFailed</c> nem <c>PatherArrived</c> foram chamados: o rastreio
+/// contou zero dos dois. Ou seja, o pather não desistiu nem chegou — alguém
+/// <b>encerrou o job</b>, e o <c>StopDead</c> do encerramento é que parou o
+/// pather.</para>
+///
+/// <para>Sem a condição do encerramento, "o job acabou" não distingue ordem
+/// nova, interrupção, falha de reserva e job impossível — que são causas em
+/// lugares opostos.</para>
+/// </summary>
+[HarmonyPatch(typeof(Pawn_JobTracker), nameof(Pawn_JobTracker.EndCurrentJob))]
+public static class JobEncerrado
+{
+    static readonly FieldInfo? CampoDoPawn = AccessTools.Field(typeof(Pawn_JobTracker), "pawn");
+
+    [HarmonyPrefix]
+    public static void Antes(Pawn_JobTracker __instance, JobCondition condition)
+    {
+        if (!RastreioDeCaminho.Ligado) return;
+        if (CampoDoPawn?.GetValue(__instance) is not Pawn pawn) return;
+
+        RastreioDeCaminho.Anotar(
+            pawn, $"job {__instance.curJob?.def?.defName ?? "-"} encerrado: {condition}");
+    }
+}
+
+/// <summary>
+/// Quando um job começa, e qual. O par do de cima: os dois juntos contam a
+/// história inteira de uma ordem que não pegou.
+/// </summary>
+[HarmonyPatch(typeof(Pawn_JobTracker), nameof(Pawn_JobTracker.StartJob))]
+public static class JobComecado
+{
+    static readonly FieldInfo? CampoDoPawn = AccessTools.Field(typeof(Pawn_JobTracker), "pawn");
+
+    [HarmonyPrefix]
+    public static void Antes(Pawn_JobTracker __instance, Job newJob, JobCondition lastJobEndCondition)
+    {
+        if (!RastreioDeCaminho.Ligado) return;
+        if (CampoDoPawn?.GetValue(__instance) is not Pawn pawn) return;
+
+        RastreioDeCaminho.Anotar(
+            pawn,
+            $"job {newJob?.def?.defName ?? "-"} começou " +
+            $"(alvo {(newJob?.targetA.IsValid == true ? $"{newJob.targetA.Cell.x},{newJob.targetA.Cell.z}" : "-")}, " +
+            $"anterior terminou em {lastJobEndCondition})");
+    }
+}
+
+/// <summary>
+/// O pather parando sem ser por chegada nem por desistência. É por aqui que o
+/// encerramento de job zera o movimento — e é a assinatura
+/// <c>custo 0.000/1.000</c> que aparece no rastreio de pawn.
+/// </summary>
+[HarmonyPatch(typeof(Pawn_PathFollower), nameof(Pawn_PathFollower.StopDead))]
+public static class CaminhoParado
+{
+    [HarmonyPrefix]
+    public static void Antes(Pawn_PathFollower __instance)
+    {
+        if (!RastreioDeCaminho.Ligado || !__instance.Moving) return;
+        RastreioDeCaminho.Anotar(PatherEspiao.PawnDe(__instance), "StopDead (estava movendo)");
+    }
+}
+
+/// <summary>
 /// O <c>pawn</c> do seguidor de caminho é protegido. Alcançado por reflexão,
 /// uma vez, e catalogado como todo acoplamento interno.
 /// </summary>
