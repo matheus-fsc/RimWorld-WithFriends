@@ -594,3 +594,49 @@ ele o negocia.
 Aqui um valor fixo basta, porque a única propriedade que importa é ser igual dos
 dois lados: projétil em 1 (são poucos, vivem pouco, e 1 é o ritmo de maior
 fidelidade), objeto de mundo em 15.
+
+## A varredura de embaralhamento
+
+A auditoria de IL não pega ordem de coleção — está dito lá em cima, em "o que
+ela não alcança". A divergência do `DropBloodFilth` (ADR 0020) era exatamente
+isso, e custou seis rodadas. Depois dela ficou esta varredura, que é outra
+pergunta e responde em segundos:
+
+> quais listas o jogo embaralha **sem reconstruir antes**?
+
+Lista que é limpa e refeita a cada chamada entra no embaralhamento sempre na
+mesma ordem: com o mesmo gerador, sai a mesma permutação, e não há o que
+consertar. Lista que **não** é refeita carrega a ordem do embaralhamento
+anterior — e o embaralhamento anterior pode ter sido na outra máquina, em outro
+momento, por causa do mouse.
+
+```bash
+ilspycmd -o /tmp/decomp referencia/jogo/steam-*/Managed/Assembly-CSharp.dll
+```
+
+Depois, para cada `X.Shuffle()`, olhar 25 linhas acima procurando `X.Clear()`,
+`X.AddRange(` ou `X =`. Quem não tem é candidato.
+
+**Em 1.6.4871: 65 chamadas a `Shuffle`, 14 candidatas.** Destas, as que
+sobrevivem ao recarregamento e são lidas pela simulação viraram guarda:
+
+| lista | onde | remédio |
+|---|---|---|
+| `GenAdj.adjRandomOrderList` | vizinhos 8-way — **a do sangue** | ordem canônica por chamada |
+| `Toils_Ingest.cardinals` / `diagonals` | onde sentar para comer | ordem canônica por chamada |
+| `Zone.cells` / `Plan.cells` | células de zona e plano | a interface não embaralha |
+| `SymbolResolver_EdgeThing.randomRotations` | rotação na borda | ordem canônica por chamada |
+| `SymbolResolver_SingleThing.tmpRotations` | rotação na geração | canonizada na carga¹ |
+| `CellFinder.mapEdgeCells` | ponto de chegada de assalto | zerada na carga |
+
+¹ remendar o método que a embaralha derruba o Mono — duas sobrecargas, uma com
+`ref Rot4?` e dois `out`, e a instância morre em SIGSEGV antes de o mod
+carregar. Zerar o campo cobre o que importa.
+
+As que **não** precisam de nada, e é bom saber por quê: `FireUtility.fireList`,
+`RoomTempTracker.equalizeCells`, `PregnancyUtility.tmpGenesShuffled` e os vários
+`tmpCells` são limpos e refeitos antes de cada embaralhamento.
+`GasGrid.cardinalDirections` é por mapa, nasce com o mapa carregado e só é
+tocada dentro do tick.
+
+A varredura se refaz em qualquer versão nova do jogo, como o resto da auditoria.

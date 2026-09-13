@@ -208,7 +208,9 @@ public static class ModoArbitro
             (ModoEmulacao.Ativo
                 ? $" -emulacaosegundos={ModoEmulacao.DuracaoConfigurada:F0}"
                 : "") +
-            (visivel ? " -emulacaovisivel" : "");
+            (visivel ? " -emulacaovisivel" : "") +
+            // Rastreio que só um lado faz não compara com nada.
+            (RastreioDeSangue.Ligado ? " -rastrearsangue" : "");
 
         try
         {

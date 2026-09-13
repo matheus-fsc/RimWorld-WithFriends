@@ -34,6 +34,7 @@ wf — linha de comando do With Friends
   wf emular HOST ARB [segundos]    roda uma visita inteira sozinha e sai
       --roteiro raid|combate       provoca assalto e briga durante a visita
       --visivel                    com janela, para acompanhar em tempo real
+      --sangue                     rastreia a decisão de largar sangue
   wf comparar                      compara os dois diários mais novos
   wf auditar                       audita o assembly do jogo (alcance + MP)
   wf saves [p1|p2]                 lista os saves de cada instância
@@ -116,11 +117,12 @@ cmd_servidor() { [[ -n "${1:-}" ]] && PORTA="$1"; compilar_servidor
 cmd_jogos() { exec "$RAIZ/tools/dois-jogos.sh" "$@"; }
 
 cmd_emular() {
-    local visivel=0 roteiro="" args=() pegar_roteiro=0
+    local visivel=0 sangue=0 roteiro="" args=() pegar_roteiro=0
     for a in "$@"; do
         if [[ $pegar_roteiro -eq 1 ]]; then roteiro="$a"; pegar_roteiro=0; continue; fi
         case "$a" in
             --visivel)   visivel=1 ;;
+            --sangue)    sangue=1 ;;
             --roteiro)   pegar_roteiro=1 ;;
             --roteiro=*) roteiro="${a#*=}" ;;
             *)           args+=("$a") ;;
@@ -140,6 +142,7 @@ cmd_emular() {
 
     local semtela="-batchmode -nographics" extra=""
     [[ -n "$roteiro" ]] && extra="-emulacaoroteiro=$roteiro"
+    [[ $sangue -eq 1 ]] && extra="$extra -rastrearsangue"
     if [[ $visivel -eq 1 ]]; then
         semtela=""
         # Unity abre em tela cheia por padrão, e duas instâncias em tela cheia
