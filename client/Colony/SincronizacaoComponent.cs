@@ -88,6 +88,9 @@ public class SincronizacaoComponent : GameComponent
 
         // O anfitrião esperando o árbitro subir para convidá-lo. Inerte quando
         // ninguém pediu — ver ModoArbitro.Lancar.
+        Session.ModoEmulacao.Acompanhar();
+        Session.ModoArbitro.AcompanharPrazo();
+
         Session.ModoArbitro.AcompanharSubida(
             convidar: DebugActions.ConvidarParaVisita,
             alguemMaisOnline: () =>

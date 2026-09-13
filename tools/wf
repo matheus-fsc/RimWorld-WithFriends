@@ -1,0 +1,153 @@
+#!/usr/bin/env bash
+# wf — a linha de comando do With Friends.
+#
+# Uma porta só para tudo que se faz fora do jogo: subir o coordenador, abrir as
+# instâncias, rodar uma visita inteira sozinha, comparar os diários e auditar o
+# assembly. Ver tools/README.md para o porquê de cada uma.
+#
+# Feita para ser usada por gente e por ferramenta. Toda saída é texto estável em
+# stdout, todo erro vai para stderr, e o código de saída diz o que aconteceu:
+#
+#   0  deu certo — e, em `comparar`, os dois lados bateram
+#   1  falhou
+#   2  uso errado
+#   3  `comparar` achou divergência (não é erro: é o resultado)
+
+set -euo pipefail
+
+RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+JOGO="${WF_JOGO:-$HOME/.local/share/Steam/steamapps/common/RimWorld}"
+DADOS_P1="${WF_DADOS_P1:-$HOME/.config/unity3d/Ludeon Studios/RimWorld by Ludeon Studios}"
+DADOS_P2="${WF_DADOS_P2:-$HOME/.rimworld-jogador2}"
+DADOS_ARB="${WF_DADOS_ARB:-$HOME/.rimworld-arbitro}"
+PORTA="${WF_PORTA:-25555}"
+
+msg() { printf '%s\n' "$*"; }
+erro() { printf '%s\n' "$*" >&2; }
+
+ajuda() {
+cat <<'FIM'
+wf — linha de comando do With Friends
+
+  wf servidor [porta]              sobe o coordenador em primeiro plano
+  wf jogos [--arbitro SAVE]        abre duas instâncias para jogar/testar à mão
+  wf emular HOST ARB [segundos]    roda uma visita inteira sozinha e sai
+      --visivel                    com janela, para acompanhar em tempo real
+  wf comparar                      compara os dois diários mais novos
+  wf auditar                       audita o assembly do jogo (alcance + MP)
+  wf saves [p1|p2]                 lista os saves de cada instância
+  wf diarios                       lista os diários mais novos de cada lado
+  wf matar                         fecha jogos e coordenador
+  wf status                        o que está rodando agora
+
+Variáveis: WF_JOGO, WF_DADOS_P1, WF_DADOS_P2, WF_DADOS_ARB, WF_PORTA.
+FIM
+}
+
+compilar_cliente() { dotnet build "$RAIZ/client/Client.csproj" -v q --nologo; }
+compilar_servidor() { dotnet build "$RAIZ/server/Server.csproj" -v q --nologo; }
+
+subir_servidor_fundo() {
+    compilar_servidor
+    pkill -f WithFriends.Server >/dev/null 2>&1 || true
+    sleep 1
+    nohup dotnet "$RAIZ/server/bin/Debug/WithFriends.Server.dll" "$PORTA" "$RAIZ/dados" \
+        > "$RAIZ/dados-servidor.log" 2>&1 &
+    sleep 2
+    msg "coordenador em :$PORTA  (log: $RAIZ/dados-servidor.log)"
+}
+
+# A pasta de uma instância automática precisa da lista de mods e do save. Sem a
+# lista ela sobe sem o nosso mod e o sintoma é "nunca apareceu online".
+semear_pasta() {
+    local destino="$1" save="$2"
+    mkdir -p "$destino/Config" "$destino/Saves"
+    cp -n "$DADOS_P1/Config/ModsConfig.xml" "$destino/Config/" 2>/dev/null || true
+    local origem
+    for origem in "$DADOS_P1/Saves" "$DADOS_P2/Saves"; do
+        [[ -f "$origem/$save.rws" ]] && { cp -n "$origem/$save.rws" "$destino/Saves/" 2>/dev/null || true; break; }
+    done
+    [[ -f "$destino/Saves/$save.rws" ]] || { erro "save não encontrado: $save"; return 1; }
+}
+
+cmd_servidor() { [[ -n "${1:-}" ]] && PORTA="$1"; compilar_servidor
+    exec dotnet "$RAIZ/server/bin/Debug/WithFriends.Server.dll" "$PORTA" "$RAIZ/dados"; }
+
+cmd_jogos() { exec "$RAIZ/tools/dois-jogos.sh" "$@"; }
+
+cmd_emular() {
+    local visivel=0 args=()
+    for a in "$@"; do [[ "$a" == "--visivel" ]] && visivel=1 || args+=("$a"); done
+    local host="${args[0]:-}" arb="${args[1]:-}" seg="${args[2]:-120}"
+    [[ -n "$host" && -n "$arb" ]] || { erro "uso: wf emular HOST ARB [segundos] [--visivel]"; return 2; }
+
+    msg "== fechando o que estiver aberto"
+    pkill -f RimWorldLinux >/dev/null 2>&1 || true
+    pkill -f WithFriends.Server >/dev/null 2>&1 || true
+    sleep 1
+
+    msg "== compilando"; compilar_cliente
+    subir_servidor_fundo
+    semear_pasta "$DADOS_ARB" "$arb" || return 1
+
+    local semtela="-batchmode -nographics" extra=""
+    if [[ $visivel -eq 1 ]]; then semtela=""; extra="-emulacaovisivel"; fi
+
+    msg "== anfitrião \"$host\" × árbitro \"$arb\", ${seg}s$([[ $visivel -eq 1 ]] && echo ' (visível)')"
+    ( cd "$JOGO" && nohup ./RimWorldLinux $semtela $extra \
+        -emulacao -emulacaosave="$host" -arbitrosave="$arb" -emulacaosegundos="$seg" \
+        -logFile "$DADOS_P1/Player.log" > /dev/null 2>&1 & )
+
+    msg "   o anfitrião lança o árbitro sozinho em $DADOS_ARB"
+    msg "   acompanhar:  tail -f \"$DADOS_P1/Player.log\" | grep --line-buffered WithFriends"
+    msg "   ao terminar: wf comparar"
+}
+
+cmd_comparar() { exec python3 "$RAIZ/tools/comparar-diarios.py"; }
+
+cmd_auditar() {
+    local dll="$RAIZ/referencia/jogo/steam-1.6.4871/Managed/Assembly-CSharp.dll"
+    local mp="$RAIZ/referencia/repos/Multiplayer/Source"
+    [[ -f "$dll" ]] || { erro "assembly do jogo não encontrado em $dll"; return 1; }
+    exec dotnet run --project "$RAIZ/tools/Auditor" -c Release -- \
+        "$dll" "${1:-$RAIZ/auditoria.txt}" "$mp"
+}
+
+cmd_saves() {
+    local pasta="$DADOS_P1"; [[ "${1:-p1}" == "p2" ]] && pasta="$DADOS_P2"
+    ls -t "$pasta/Saves"/*.rws 2>/dev/null | while read -r f; do basename "$f" .rws; done
+}
+
+cmd_diarios() {
+    local p
+    for p in "$DADOS_P1" "$DADOS_P2" "$DADOS_ARB"; do
+        local d; d=$(ls -t "$p/WithFriends/diario"/*.log 2>/dev/null | head -1) || true
+        [[ -n "${d:-}" ]] && printf '%s\n' "$d"
+    done
+}
+
+cmd_matar() {
+    pkill -f RimWorldLinux >/dev/null 2>&1 || true
+    pkill -f WithFriends.Server >/dev/null 2>&1 || true
+    msg "fechado."
+}
+
+cmd_status() {
+    msg "jogos rodando:       $(pgrep -cf RimWorldLinux || echo 0)"
+    msg "coordenador:         $(pgrep -cf WithFriends.Server || echo 0)"
+    cmd_diarios | sed 's/^/diário: /'
+}
+
+case "${1:-}" in
+    servidor) shift; cmd_servidor "$@" ;;
+    jogos)    shift; cmd_jogos "$@" ;;
+    emular)   shift; cmd_emular "$@" ;;
+    comparar) shift; cmd_comparar "$@" ;;
+    auditar)  shift; cmd_auditar "$@" ;;
+    saves)    shift; cmd_saves "$@" ;;
+    diarios)  shift; cmd_diarios "$@" ;;
+    matar)    shift; cmd_matar "$@" ;;
+    status)   shift; cmd_status "$@" ;;
+    -h|--help|help|"") ajuda ;;
+    *) erro "comando desconhecido: $1"; ajuda >&2; exit 2 ;;
+esac

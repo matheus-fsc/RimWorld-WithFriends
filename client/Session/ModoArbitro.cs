@@ -59,6 +59,14 @@ public static class ModoArbitro
         GenCommandLine.CommandLineArgPassed("arbitro");
 
     /// <summary>
+    /// Esta instância roda sem ninguém na frente — árbitro ou emulação.
+    ///
+    /// <para>Os remendos de "não desenhar" valem para as duas: a emulação também
+    /// sobe com <c>-nographics</c>, e o jogo assume textura nos mesmos lugares.</para>
+    /// </summary>
+    public static bool SemNinguemNaFrente => Ativo || ModoEmulacao.Ativo;
+
+    /// <summary>
     /// Prepara a instância. Chamado na subida do mod.
     ///
     /// <para>Volume zero porque som sorteia (grão, volume) e, mesmo isolado do
@@ -107,6 +115,14 @@ public static class ModoArbitro
         }
 
         var cfg = WithFriendsMod.Settings;
+
+        // A linha de comando ganha das opções: numa emulação quem escolhe o save
+        // é o script, e depender do que está gravado no perfil tornaria o
+        // experimento dependente de um estado invisível.
+        if (GenCommandLine.TryGetCommandLineArg("arbitrosave", out string daLinha) &&
+            !string.IsNullOrWhiteSpace(daLinha))
+            cfg.arbitroSave = daLinha;
+
         if (string.IsNullOrWhiteSpace(cfg.arbitroSave))
         {
             Log.Error(
@@ -137,9 +153,24 @@ public static class ModoArbitro
         string log = System.IO.Path.Combine(pasta, "Player.log");
         System.IO.Directory.CreateDirectory(pasta);
 
+        // **Sem tela por padrão, com tela quando se quer ver.**
+        //
+        // Uma emulação cega roda mais rápido e não rouba o foco; uma visível
+        // deixa acompanhar o que está sendo testado, que é o que se quer quando
+        // a pergunta ainda é "o que está acontecendo?" em vez de "qual tick
+        // divergiu?".
+        bool visivel = GenCommandLine.CommandLineArgPassed("emulacaovisivel");
+        string semTela = visivel ? "" : "-batchmode -nographics ";
+
         string argumentos =
-            $"-batchmode -nographics -arbitro -arbitrosave=\"{cfg.arbitroSave}\" " +
-            $"-savedatafolder=\"{pasta}\" -logFile \"{log}\"";
+            semTela + $"-arbitro -arbitrosave=\"{cfg.arbitroSave}\" " +
+            $"-savedatafolder=\"{pasta}\" -logFile \"{log}\"" +
+            // Mesmo prazo do anfitrião: os dois precisam despejar, e só quem
+            // sabe quanto tempo a emulação vai durar é quem a começou.
+            (ModoEmulacao.Ativo
+                ? $" -emulacaosegundos={ModoEmulacao.DuracaoConfigurada:F0}"
+                : "") +
+            (visivel ? " -emulacaovisivel" : "");
 
         try
         {
@@ -166,6 +197,39 @@ public static class ModoArbitro
             "With Friends: árbitro subindo… o convite sai sozinho quando ele entrar.",
             MessageTypeDefOf.NeutralEvent, historical: false);
         return true;
+    }
+
+    static float arbitroAcabaEm = -1f;
+
+    /// <summary>
+    /// O árbitro também tem prazo, e é o mesmo do anfitrião.
+    ///
+    /// <para>Sem isto, só o anfitrião despejava os rastreios no fim: o árbitro
+    /// era morto junto com o processo e o diário dele terminava sem histórico
+    /// nenhum — e a comparação, que é a razão de tudo isto existir, não tinha o
+    /// que comparar.</para>
+    /// </summary>
+    public static void AcompanharPrazo()
+    {
+        if (!Ativo) return;
+
+        var sessao = Colony.SincronizacaoComponent.Atual?.Sessao;
+        if (sessao is not { Estado: EstadoSessaoLocal.Simulando }) return;
+
+        // Mesma regra do anfitrião: conta da primeira liberação da barreira.
+        if (!VisitaEmAndamento.JaComecou) return;
+
+        if (arbitroAcabaEm < 0f)
+        {
+            // Um pouco depois do anfitrião: se os dois fecharem no mesmo
+            // instante, um pode morrer no meio do próprio despejo.
+            arbitroAcabaEm = Time.realtimeSinceStartup + ModoEmulacao.DuracaoConfigurada + 3f;
+            return;
+        }
+
+        if (Time.realtimeSinceStartup < arbitroAcabaEm) return;
+
+        ModoEmulacao.Encerrar(sessao, "árbitro");
     }
 
     /// <summary>
@@ -195,44 +259,6 @@ public static class ModoArbitro
 }
 
 /// <summary>
-/// O árbitro carrega a colônia dele sozinho.
-///
-/// <para>Aceitar uma visita exige estar <b>dentro de uma partida</b>: o
-/// visitante congela a própria colônia, cria o ponto de retorno e publica o
-/// assentamento dele. Uma instância em <c>-batchmode</c> sobe no menu principal
-/// e ficaria ali para sempre.</para>
-///
-/// <para>Então <c>-arbitrosave=NOME</c> diz qual save abrir. Deve ser a colônia
-/// do visitante humano — mesmo planeta, mesma semente — senão o coordenador
-/// recusa com "planeta divergente" e o experimento nem começa.</para>
-/// </summary>
-[HarmonyPatch(typeof(MainMenuDrawer), nameof(MainMenuDrawer.MainMenuOnGUI))]
-public static class ArbitroCarregaSozinho
-{
-    static bool jaTentou;
-
-    [HarmonyPostfix]
-    public static void Depois()
-    {
-        if (!ModoArbitro.Ativo || jaTentou) return;
-        jaTentou = true;
-
-        if (!GenCommandLine.TryGetCommandLineArg("arbitrosave", out string nome) ||
-            string.IsNullOrWhiteSpace(nome))
-        {
-            Log.Warning(
-                "[WithFriends] modo árbitro sem -arbitrosave=NOME: não há colônia para " +
-                "entrar na visita, e esta instância não vai fazer nada.");
-            return;
-        }
-
-        Log.Message($"[WithFriends] árbitro abrindo a colônia \"{nome}\"…");
-        LongEventHandler.QueueLongEvent(
-            () => GameDataSaveLoader.LoadGame(nome), "LoadingLongEvent", true, null);
-    }
-}
-
-/// <summary>
 /// Sem interface gráfica, a <c>GUISkin</c> não existe e o jogo estoura ao
 /// desenhar. Um esqueleto vazio basta — nada vai ser visto.
 /// </summary>
@@ -244,7 +270,7 @@ public static class ArbitroSemSkin
     [HarmonyPrefix]
     public static bool Antes(ref GUISkin __result)
     {
-        if (!ModoArbitro.Ativo) return true;
+        if (!ModoArbitro.SemNinguemNaFrente) return true;
 
         __result = vazia ??= ScriptableObject.CreateInstance<GUISkin>();
         return false;
@@ -263,11 +289,27 @@ public static class ArbitroNaoDesenha
 {
     static System.Collections.Generic.IEnumerable<System.Reflection.MethodBase> TargetMethods()
     {
+        // A lista é a dele, e cada linha tem um motivo que só aparece rodando:
+        // a primeira tentativa levou o jogo a passar minutos redesenhando
+        // seções de mapa que ninguém ia ver.
         yield return AccessTools.Method(typeof(WaterInfo), nameof(WaterInfo.SetTextures));
         yield return AccessTools.Method(typeof(PortraitsCache), nameof(PortraitsCache.Get));
         yield return AccessTools.Method(typeof(SubcameraDriver), nameof(SubcameraDriver.UpdatePositions));
+
+        // Desenho do mapa: o grosso do trabalho inútil numa instância cega.
+        yield return AccessTools.Method(typeof(Map), nameof(Map.MapUpdate));
+        yield return AccessTools.Method(typeof(Section), nameof(Section.RegenerateAllLayers));
+        yield return AccessTools.Method(typeof(SectionLayer), nameof(SectionLayer.DrawLayer));
+
+        // Medir texto exige fonte, e fonte exige interface.
+        yield return AccessTools.Method(typeof(GUIStyle), nameof(GUIStyle.CalcSize));
+        yield return AccessTools.Method(typeof(FloatMenuOption), nameof(FloatMenuOption.SetSizeMode));
+
+        // Preferências: a instância automática não pode escrever por cima das
+        // do jogador — ela roda com volume zero e outras coisas mexidas.
+        yield return AccessTools.Method(typeof(Prefs), nameof(Prefs.Save));
     }
 
     [HarmonyPrefix]
-    public static bool Antes() => !ModoArbitro.Ativo;
+    public static bool Antes() => !ModoArbitro.SemNinguemNaFrente;
 }

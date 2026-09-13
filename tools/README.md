@@ -1,15 +1,93 @@
 # tools
 
-Ferramentas fora do jogo (§12):
+Tudo o que se faz **fora** do jogo (§12). A porta de entrada é uma só:
 
-- **inspetor de save** — abre um checkpoint e imprime
-  `{ game_tick, world_cursor, mod_set_hash, content_hash, wall_clock }`.
-  É o que teria detectado o incidente da §15.1 em minutos.
-- **replay de sessão** — reexecuta o log de comandos de uma sessão e aponta o
-  tick da divergência.
+```
+tools/wf
+```
+
+```
+wf servidor [porta]              sobe o coordenador em primeiro plano
+wf jogos [--arbitro SAVE]        abre duas instâncias para jogar/testar à mão
+wf emular HOST ARB [segundos]    roda uma visita inteira sozinha e sai
+    --visivel                    com janela, para acompanhar em tempo real
+wf comparar                      compara os dois diários mais novos
+wf auditar                       audita o assembly do jogo (alcance + MP)
+wf saves [p1|p2]                 lista os saves de cada instância
+wf diarios                       lista os diários mais novos de cada lado
+wf matar                         fecha jogos e coordenador
+wf status                        o que está rodando agora
+```
+
+Variáveis de ambiente, se os caminhos forem outros: `WF_JOGO`, `WF_DADOS_P1`,
+`WF_DADOS_P2`, `WF_DADOS_ARB`, `WF_PORTA`.
+
+## O ciclo que importa: emular e comparar
+
+```
+wf emular MinhaColonia ColoniaDoVisitante 120
+# … dois minutos …
+wf comparar
+```
+
+`emular` sobe o coordenador, abre o anfitrião **sem interface**, e ele chama o
+árbitro (docs/ARBITRO.md), convida, despausa e deixa rodar. No fim, os dois lados
+despejam histórico de RNG, rastreio por local de chamada e estado de pawn nos
+respectivos diários, e o processo fecha.
+
+`comparar` faz o que antes era feito à mão: acha o primeiro tick em que o
+contador de sorteios da sessão diverge, diferencia os locais de chamada naquele
+tick, e mostra o primeiro pawn com estado diferente — dizendo se ele veio
+**antes** do sorteio divergir (causa) ou depois (consequência).
+
+**Por que isto existe.** Reproduzir uma divergência custava dois humanos, duas
+janelas e vários minutos de jogo, e cada hipótese testada exigia repetir tudo.
+O gargalo nunca foi escrever o guarda; foi jogar.
+
+### Ver acontecendo
+
+```
+wf emular MinhaColonia ColoniaDoVisitante 120 --visivel
+```
+
+Mesma coisa com janela nos dois lados. Mais lento e rouba o foco, mas é o que se
+quer quando a pergunta ainda é *"o que está acontecendo?"* em vez de *"qual tick
+divergiu?"*.
+
+## Para ferramenta automática
+
+`wf` é feita para ser chamada por script e por agente, não só por gente:
+
+- saída estável em `stdout`, erros em `stderr`;
+- códigos de saída com significado:
+
+| código | quer dizer |
+|---|---|
+| `0` | deu certo — e, em `comparar`, **os dois lados bateram** |
+| `1` | falhou |
+| `2` | uso errado |
+| `3` | `comparar` **achou divergência** — não é erro, é o resultado |
+
+O `3` é deliberado: divergir é o resultado esperado de uma reprodução. Quem
+chama precisa distinguir "não rodou" de "rodou e achou".
+
+Um laço de investigação inteiro cabe em três linhas:
+
+```bash
+wf emular "$HOST" "$ARB" 120
+sleep 140
+wf comparar || [ $? -eq 3 ]   # 3 = achou, e é isso que se quer ler
+```
+
+## O resto
+
+- **`Auditor/`** — varre o `Assembly-CSharp.dll` procurando leitura de fonte
+  local dentro da simulação, e cruza com os alvos do Multiplayer. `Alcance.cs`
+  responde, pelo IL, o que uma visita realmente alcança — corta a lista de 878
+  alvos dele para os ~450 que nos dizem respeito. Ver `docs/AUDITORIA.md`.
 - **`ClienteFalso/`** — fala o protocolo sem o jogo, usando o mesmo
   `DirectTransport` do mod. Serve para exercitar o coordenador com um `.rws`
-  real e para reproduzir o incidente da §15.1 sob demanda:
+  real:
 
   ```fish
   dotnet run --project tools/ClienteFalso -- [::1]:25555 <save.rws> --incidente
@@ -17,59 +95,10 @@ Ferramentas fora do jogo (§12):
 
   O endereço aceita literal IPv6 entre colchetes, IPv4 e nome de host; sem
   porta, usa 25555. `--colonia <id>` reutiliza uma colônia entre execuções.
-- **gerador de carga** — N clientes falsos contra o coordenador, sem o jogo.
+- **`dois-jogos.sh`** — abre duas instâncias para jogar à mão. `wf jogos`
+  encaminha para ele.
+- **`comparar-diarios.py`** — o comparador. `wf comparar` encaminha para ele.
+- **`servidor.fish`** — sobe só o coordenador.
 
-## Scripts
-
-> Os `.sh` são bash e têm shebang: chame **`./tools/x.sh`**, não `fish
-> tools/x.sh` — o fish tentaria interpretar sintaxe bash e falharia já na
-> primeira atribuição de variável. Os `.fish` são fish e valem o mesmo:
-> `./tools/x.fish`.
-
-- **`servidor.fish [porta] [dados]`** — para, reconstrói e sobe o coordenador.
-  Existe porque o binário em execução trava o próprio build.
-- **`dois-jogos.sh`** — compila o mod, fecha o que estiver aberto e sobe as
-  duas instâncias, cada uma com pasta de dados e **log próprios**.
-
-  ```
-  ./tools/dois-jogos.sh                 compila, fecha e abre os dois
-  ./tools/dois-jogos.sh --sem-build     não recompila
-  ./tools/dois-jogos.sh --servidor      sobe o coordenador junto
-  ./tools/dois-jogos.sh --so-segundo    abre só a segunda instância
-  ./tools/dois-jogos.sh --matar         só fecha
-  ```
-
-  Resolve três coisas de uma vez: (1) lockstep exige código idêntico, e o jogo
-  carrega assembly na subida — build e reabertura têm que andar juntos; (2) o
-  `player_id` vive nas settings, então a segunda instância precisa de
-  `-savedatafolder` para não duplicar identidade (§7.1 regra 5); (3) o Unity
-  escreve `Player.log` num caminho fixo que **não** acompanha o
-  `-savedatafolder`, então sem `-logFile` a segunda instância sobrescreveria o
-  log da primeira.
-
-Nenhuma delas depende de assembly do RimWorld.
-
-## Reconstruir com o jogo aberto
-
-O mod é publicado em `dist/WithFriends/Assemblies/` de forma **atômica**: o
-assembly é escrito ao lado com sufixo `.novo` e renomeado por cima. `Move` no
-mesmo sistema de arquivos é atômico, então o jogo vê o arquivo antigo ou o novo,
-nunca um pedaço dele.
-
-Isso existe porque o contrário aconteceu: um `dotnet build` com o jogo abrindo ao
-mesmo tempo, e o RimWorld leu o DLL pela metade. O sintoma não parecia build —
-parecia bug de mod:
-
-```
-Could not instantiate a GameComponent of type View.GetSelectionWeight
-SaveableFromNode exception: Constructor on type 'SincronizacaoComponent' not found
-System.BadImageFormatException: Method has zero rva
-```
-
-Nomes de tipo sem sentido e construtores "faltando" que existem no código são a
-assinatura de metadata truncada. Se aparecerem de novo, o primeiro lugar a olhar
-é a hora do DLL contra a hora do log — não o código.
-
-**O que a publicação atômica não resolve:** trocar o assembly de um jogo que já
-está rodando não recarrega nada. O RimWorld lê os assemblies na subida; para
-testar código novo é preciso reabrir, que é o que `dois-jogos.sh` faz.
+Ainda não existem, e continuam valendo: inspetor de save, replay de sessão a
+partir do log de comandos, e gerador de carga com N clientes falsos.
