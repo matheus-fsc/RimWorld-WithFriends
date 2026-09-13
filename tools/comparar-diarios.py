@@ -107,7 +107,13 @@ def curto(k, n=6):
 
 def main():
     a = mais_novo(P1)
-    b = next((mais_novo(p) for p in P2 if os.path.isdir(p) and mais_novo(p)), None)
+
+    # O mais novo entre os candidatos, não o primeiro que existir: numa
+    # partida de verdade o árbitro nem sobe, e o diário velho dele fazia a
+    # comparação pegar duas corridas diferentes — que não têm tick em comum,
+    # ou pior, têm e mentem.
+    b = max((c for c in (mais_novo(p) for p in P2) if c),
+            key=os.path.getmtime, default=None)
     if not a or not b:
         print("não achei os dois diários. rodou tools/emulacao.sh?")
         return 1
