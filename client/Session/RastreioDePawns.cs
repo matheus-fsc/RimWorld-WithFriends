@@ -64,6 +64,28 @@ public static class RastreioDePawns
         var mapa = Find.Maps?.FirstOrDefault(m => m.uniqueID == mapaId);
         if (mapa == null) return;
 
+        // **A amostra é leitura da simulação, não da interface.**
+        //
+        // `Amostrar` roda depois do tick, e ali `NaInterface.Agora` já é
+        // verdadeiro. Isso importa porque há guardas que **mentem de
+        // propósito** para a interface — `AlistamentoOtimista` faz
+        // `drafter.Drafted` responder o valor pedido, não o real, para o botão
+        // não parecer travado.
+        //
+        // Sem esta declaração o rastreio lia a mentira. Custou caro uma vez: o
+        // comparador apontou `draft 1` contra `draft 0` em três colonos e
+        // rotulou "ANTES do sorteio divergir — é a causa". Eram exatamente os
+        // três pawns com palpite pendente na máquina do anfitrião, e o estado
+        // de verdade era igual dos dois lados. Instrumento que mede a si mesmo
+        // não mede nada.
+        bool eraInterface = NaInterface.Tickando;
+        NaInterface.Tickando = true;
+        try { AmostrarDeVerdade(tickDeSessao, mapa); }
+        finally { NaInterface.Tickando = eraInterface; }
+    }
+
+    static void AmostrarDeVerdade(long tickDeSessao, Map mapa)
+    {
         var linhas = new List<string>();
 
         // Ordem por id: a ordem das listas do jogo não é contrato.
