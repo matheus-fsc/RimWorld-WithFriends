@@ -50,9 +50,21 @@ O gargalo nunca foi escrever o guarda; foi jogar.
 wf emular MinhaColonia ColoniaDoVisitante 120 --visivel
 ```
 
-Mesma coisa com janela nos dois lados. Mais lento e rouba o foco, mas é o que se
-quer quando a pergunta ainda é *"o que está acontecendo?"* em vez de *"qual tick
-divergiu?"*.
+Mesma coisa com janela nos dois lados, cada uma em metade da tela. Mais lento e
+rouba o foco, mas é o que se quer quando a pergunta ainda é *"o que está
+acontecendo?"* em vez de *"qual tick divergiu?"*.
+
+Duas coisas foram necessárias e nenhuma é óbvia:
+
+- **`-screen-fullscreen 0` do Unity não basta.** O argumento é aplicado e logo
+  sobrescrito: o RimWorld chama `Screen.SetResolution` com o que está nas
+  preferências dele. Por isso o tamanho é forçado de dentro do jogo, no modo
+  automático — e é seguro porque `Prefs.Save` está cancelado ali, então o arquivo
+  de preferências do jogador não é tocado.
+- **Posição não tem argumento.** Quem posiciona é o gerenciador de janelas; a CLI
+  tenta com `xdotool` depois que as duas abrem. Melhor esforço de propósito: se
+  falhar, as duas aparecem com o tamanho certo uma sobre a outra, o que é ruim
+  mas não impede nada.
 
 ## Para ferramenta automática
 

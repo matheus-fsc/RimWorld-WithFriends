@@ -74,6 +74,8 @@ public static class ModoArbitro
     /// </summary>
     public static void Preparar()
     {
+        if (SemNinguemNaFrente) EmJanelaMetadeDaTela();
+
         if (!Ativo) return;
 
         Prefs.VolumeGame = 0;
@@ -83,6 +85,42 @@ public static class ModoArbitro
         Log.Message(
             "[WithFriends] modo árbitro: esta instância simula e não desenha. " +
             "Ela entra na visita como visitante e só compara digitais.");
+    }
+
+    /// <summary>
+    /// Meia tela, em janela — para as duas instâncias caberem lado a lado.
+    ///
+    /// <para><b>Por que não basta <c>-screen-fullscreen 0</c>.</b> O argumento do
+    /// Unity é aplicado e logo em seguida sobrescrito: o RimWorld chama
+    /// <c>Screen.SetResolution</c> com o que está nas preferências dele, e o que
+    /// estava lá era tela cheia. Medido — as duas janelas abriam em 1920×1200,
+    /// uma em cima da outra.</para>
+    ///
+    /// <para>Mexer aqui é seguro porque <c>Prefs.Save</c> está cancelado nas
+    /// instâncias automáticas: a preferência do jogador no disco não é tocada.</para>
+    ///
+    /// <para>Posição é outra história — o Unity não tem argumento para isso, e
+    /// quem posiciona é o gerenciador de janelas. A CLI tenta com
+    /// <c>xdotool</c> depois que as duas abrem, em melhor esforço.</para>
+    /// </summary>
+    static void EmJanelaMetadeDaTela()
+    {
+        if (!GenCommandLine.CommandLineArgPassed("emulacaovisivel")) return;
+
+        try
+        {
+            int largura = Display.main.systemWidth / 2;
+            int altura = Display.main.systemHeight - 80;
+
+            Prefs.FullScreen = false;
+            Screen.SetResolution(largura, altura, FullScreenMode.Windowed);
+
+            Log.Message($"[WithFriends] janela de emulação: {largura}×{altura}.");
+        }
+        catch (Exception e)
+        {
+            Log.Warning($"[WithFriends] não consegui ajustar a janela: {e.Message}");
+        }
     }
 
     /// <summary>

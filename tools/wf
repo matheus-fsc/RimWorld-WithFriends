@@ -70,6 +70,45 @@ semear_pasta() {
     [[ -f "$destino/Saves/$save.rws" ]] || { erro "save não encontrado: $save"; return 1; }
 }
 
+# Largura e altura da tela, ou um palpite razoável se não der para descobrir.
+tamanho_da_tela() {
+    local m
+    m=$(xrandr --current 2>/dev/null | grep -m1 '\*' | awk '{print $1}') || true
+    if [[ "$m" =~ ^([0-9]+)x([0-9]+)$ ]]; then
+        printf '%s %s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+    else
+        printf '1920 1080\n'
+    fi
+}
+
+# Põe as duas janelas lado a lado depois que elas abrem.
+#
+# Melhor esforço, de propósito: o Unity não tem argumento de POSIÇÃO — só de
+# tamanho —, e posicionar depende do gerenciador de janelas. Numa sessão Wayland
+# isto só funciona porque o jogo roda sob XWayland. Se falhar, as duas janelas
+# aparecem com o tamanho certo em cima uma da outra, que é ruim mas não impede
+# nada — por isso nada aqui interrompe a emulação.
+alinhar_janelas() {
+    command -v xdotool >/dev/null 2>&1 || return 0
+
+    local largura altura n=0 ids
+    read -r largura altura < <(tamanho_da_tela)
+
+    # Esperar as duas aparecerem: o árbitro só sobe depois do anfitrião.
+    while [[ $n -lt 60 ]]; do
+        ids=$(xdotool search --class RimWorld 2>/dev/null | tail -2) || true
+        [[ $(printf '%s\n' "$ids" | grep -c .) -ge 2 ]] && break
+        sleep 2; n=$((n+1))
+    done
+
+    local i=0 id
+    for id in $ids; do
+        xdotool windowmove "$id" $((i * largura / 2)) 0 \
+                windowsize "$id" $((largura / 2)) $((altura - 80)) 2>/dev/null || true
+        i=$((i+1))
+    done
+}
+
 cmd_servidor() { [[ -n "${1:-}" ]] && PORTA="$1"; compilar_servidor
     exec dotnet "$RAIZ/server/bin/Debug/WithFriends.Server.dll" "$PORTA" "$RAIZ/dados"; }
 
@@ -91,7 +130,15 @@ cmd_emular() {
     semear_pasta "$DADOS_ARB" "$arb" || return 1
 
     local semtela="-batchmode -nographics" extra=""
-    if [[ $visivel -eq 1 ]]; then semtela=""; extra="-emulacaovisivel"; fi
+    if [[ $visivel -eq 1 ]]; then
+        semtela=""
+        # Unity abre em tela cheia por padrão, e duas instâncias em tela cheia
+        # se cobrem — não dá para ver as duas, que é o ponto do modo visível.
+        # `-screen-fullscreen 0` com metade da largura deixa as duas lado a lado.
+        local largura altura
+        read -r largura altura < <(tamanho_da_tela)
+        extra="-emulacaovisivel -screen-fullscreen 0 -screen-width $((largura / 2)) -screen-height $((altura - 80))"
+    fi
 
     msg "== anfitrião \"$host\" × árbitro \"$arb\", ${seg}s$([[ $visivel -eq 1 ]] && echo ' (visível)')"
     ( cd "$JOGO" && nohup ./RimWorldLinux $semtela $extra \
@@ -99,6 +146,7 @@ cmd_emular() {
         -logFile "$DADOS_P1/Player.log" > /dev/null 2>&1 & )
 
     msg "   o anfitrião lança o árbitro sozinho em $DADOS_ARB"
+    [[ $visivel -eq 1 ]] && ( alinhar_janelas & ) >/dev/null 2>&1
     msg "   acompanhar:  tail -f \"$DADOS_P1/Player.log\" | grep --line-buffered WithFriends"
     msg "   ao terminar: wf comparar"
 }
@@ -129,6 +177,12 @@ cmd_diarios() {
 cmd_matar() {
     pkill -f RimWorldLinux >/dev/null 2>&1 || true
     pkill -f WithFriends.Server >/dev/null 2>&1 || true
+
+    # Um jogo que ignora o TERM segura a janela dele, e a corrida seguinte abre
+    # em cima de uma tela cheia órfã. Dá meio segundo e insiste.
+    sleep 1
+    pkill -9 -f RimWorldLinux >/dev/null 2>&1 || true
+
     msg "fechado."
 }
 
