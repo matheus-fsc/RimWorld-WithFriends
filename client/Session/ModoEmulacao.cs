@@ -85,7 +85,14 @@ public static class ModoEmulacao
         {
             acabaEm = Time.realtimeSinceStartup + Duracao;
             Log.Message($"[WithFriends/emulação] visita de pé — rodando por {Duracao:F0}s.");
+
+            // O roteiro só começa a contar agora: os segundos dele são de
+            // visita, não de processo. Entre subir o jogo e a barreira andar
+            // passam dezenas de segundos que não interessam a ninguém.
+            if (RoteiroDeEmulacao.Algum) RoteiroDeEmulacao.Comecar();
         }
+
+        RoteiroDeEmulacao.Acompanhar();
 
         // Despausar sempre: a ressincronização volta pausada de propósito
         // (pauseOnDesync), e numa emulação não há ninguém para retomar. Sem

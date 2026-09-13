@@ -139,7 +139,13 @@ def main():
     for k in sorted(set(la) | set(lb)):
         if la.get(k, 0) != lb.get(k, 0):
             achou = True
-            print(f"   A={la.get(k,0):<4} B={lb.get(k,0):<4} {curto(k)}")
+            print(f"   A={la.get(k,0):<4} B={lb.get(k,0):<4}")
+            # A cadeia INTEIRA, uma chamada por linha. Truncada em seis níveis
+            # ela mostrava "Filth.SpawnSetup < GenSpawn.Spawn < TryMakeFilth" e
+            # escondia quem chamou — e é o chamador que diz se foi sangue de
+            # ferimento, pegada ou vômito. Cada um leva a um lugar diferente.
+            for nivel in curto(k, 99).split(" < "):
+                print(f"        < {nivel}")
     if not achou:
         print("   (nenhum — o anel de locais não cobre este tick; ver RastreioDeRng.TicksGuardados)")
 

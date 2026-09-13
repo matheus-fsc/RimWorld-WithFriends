@@ -32,6 +32,7 @@ wf — linha de comando do With Friends
   wf servidor [porta]              sobe o coordenador em primeiro plano
   wf jogos [--arbitro SAVE]        abre duas instâncias para jogar/testar à mão
   wf emular HOST ARB [segundos]    roda uma visita inteira sozinha e sai
+      --roteiro raid|combate       provoca assalto e briga durante a visita
       --visivel                    com janela, para acompanhar em tempo real
   wf comparar                      compara os dois diários mais novos
   wf auditar                       audita o assembly do jogo (alcance + MP)
@@ -115,8 +116,16 @@ cmd_servidor() { [[ -n "${1:-}" ]] && PORTA="$1"; compilar_servidor
 cmd_jogos() { exec "$RAIZ/tools/dois-jogos.sh" "$@"; }
 
 cmd_emular() {
-    local visivel=0 args=()
-    for a in "$@"; do [[ "$a" == "--visivel" ]] && visivel=1 || args+=("$a"); done
+    local visivel=0 roteiro="" args=() pegar_roteiro=0
+    for a in "$@"; do
+        if [[ $pegar_roteiro -eq 1 ]]; then roteiro="$a"; pegar_roteiro=0; continue; fi
+        case "$a" in
+            --visivel)   visivel=1 ;;
+            --roteiro)   pegar_roteiro=1 ;;
+            --roteiro=*) roteiro="${a#*=}" ;;
+            *)           args+=("$a") ;;
+        esac
+    done
     local host="${args[0]:-}" arb="${args[1]:-}" seg="${args[2]:-120}"
     [[ -n "$host" && -n "$arb" ]] || { erro "uso: wf emular HOST ARB [segundos] [--visivel]"; return 2; }
 
@@ -130,6 +139,7 @@ cmd_emular() {
     semear_pasta "$DADOS_ARB" "$arb" || return 1
 
     local semtela="-batchmode -nographics" extra=""
+    [[ -n "$roteiro" ]] && extra="-emulacaoroteiro=$roteiro"
     if [[ $visivel -eq 1 ]]; then
         semtela=""
         # Unity abre em tela cheia por padrão, e duas instâncias em tela cheia
@@ -137,10 +147,10 @@ cmd_emular() {
         # `-screen-fullscreen 0` com metade da largura deixa as duas lado a lado.
         local largura altura
         read -r largura altura < <(tamanho_da_tela)
-        extra="-emulacaovisivel -screen-fullscreen 0 -screen-width $((largura / 2)) -screen-height $((altura - 80))"
+        extra="$extra -emulacaovisivel -screen-fullscreen 0 -screen-width $((largura / 2)) -screen-height $((altura - 80))"
     fi
 
-    msg "== anfitrião \"$host\" × árbitro \"$arb\", ${seg}s$([[ $visivel -eq 1 ]] && echo ' (visível)')"
+    msg "== anfitrião \"$host\" × árbitro \"$arb\", ${seg}s$([[ -n "$roteiro" ]] && echo ", roteiro $roteiro")$([[ $visivel -eq 1 ]] && echo ' (visível)')"
     ( cd "$JOGO" && nohup ./RimWorldLinux $semtela $extra \
         -emulacao -emulacaosave="$host" -arbitrosave="$arb" -emulacaosegundos="$seg" \
         -logFile "$DADOS_P1/Player.log" > /dev/null 2>&1 & )

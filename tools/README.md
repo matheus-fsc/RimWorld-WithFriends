@@ -25,10 +25,44 @@ Variáveis de ambiente, se os caminhos forem outros: `WF_JOGO`, `WF_DADOS_P1`,
 ## O ciclo que importa: emular e comparar
 
 ```
-wf emular MinhaColonia ColoniaDoVisitante 120
+wf emular MinhaColonia ColoniaDoVisitante 120 --roteiro raid
 # … dois minutos …
 wf comparar
 ```
+
+O `--roteiro` é o que faz a emulação valer: uma visita **parada** exercita
+plantas crescendo e animais perambulando, e nenhuma das divergências que
+perseguimos apareceu aí. Todas apareceram em **combate**. Sem roteiro, o teste
+roda no caminho errado.
+
+| roteiro | o que faz |
+|---|---|
+| `raid` | alista os colonos, chama um assalto aos 10 s e outro maior aos 60 s |
+| `combate` | o mesmo, mais desalistar e realistar no meio |
+
+Tudo pelos mesmos comandos de sessão que um jogador usaria: alistar passa pelo
+setter de `Drafted`, o assalto é `TipoDeComando.Incidente`, carimbado pelo
+coordenador. Não há atalho para dentro da simulação — se o caminho do comando
+estiver quebrado, a emulação quebra junto, que é o que se quer de um teste.
+
+Saída real de uma corrida de dois minutos:
+
+```
+ticks comparados: 81  (0..80)
+primeira divergência de sorteio: tick 31  (A=522  B=523)
+
+-- locais de chamada no tick 31  (A=24 B=25)
+   A=0    B=1
+        < Rand.Range
+        < FloatRange.get_RandomInRange
+        < Filth.SpawnSetup
+        < GenSpawn.Spawn
+        < FilthMaker.TryMakeFilth
+        < Pawn_HealthTracker.DropBloodFilth
+        < Pawn_HealthTracker.HealthTickInterval
+```
+
+A mesma família que custou um dia inteiro de jogo a dois, agora em um comando.
 
 `emular` sobe o coordenador, abre o anfitrião **sem interface**, e ele chama o
 árbitro (docs/ARBITRO.md), convida, despausa e deixa rodar. No fim, os dois lados
