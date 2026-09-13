@@ -148,3 +148,25 @@ wf comparar || [ $? -eq 3 ]   # 3 = achou, e é isso que se quer ler
 
 Ainda não existem, e continuam valendo: inspetor de save, replay de sessão a
 partir do log de comandos, e gerador de carga com N clientes falsos.
+
+## O limite da emulação
+
+`wf emular` sobe as duas instâncias em `-batchmode -nographics`. Isso é o que a
+torna barata e repetível — e é também o que ela **não** alcança.
+
+Uma instância sem tela não tem mouse, não abre menu flutuante, não desenha e
+não passa o cursor sobre nada. A classe de divergência em que *a interface
+pergunta à simulação e a simulação responde guardando* (ver `NaInterface`) fica
+estruturalmente fora do alcance dela: o rastreio de pathfinding, rodando numa
+emulação inteira, conta **zero** consultas de alcançabilidade vindas de fora da
+simulação, em todos os ticks.
+
+Então:
+
+| a divergência nasce em | reproduz com |
+|---|---|
+| simulação (combate, sangue, clima, caminho) | `wf emular --roteiro …` |
+| interface (menu, mouse, seleção, câmera) | `wf jogos --caminho` e alguém clicando |
+
+Para as segundas, os rastreios (`--caminho`, `--sangue`) agora também podem ser
+ligados em `wf jogos`, que é onde há interface de verdade dos dois lados.

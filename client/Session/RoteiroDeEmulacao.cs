@@ -4,6 +4,7 @@ using System.Linq;
 using RimWorld;
 using UnityEngine;
 using Verse;
+using Verse.AI;
 
 namespace WithFriends.Client.Session;
 
@@ -84,6 +85,18 @@ public static class RoteiroDeEmulacao
             new(60f, "chamar um assalto maior",   () => Assalto(2f)),
         },
 
+        // A divergência do dia 13 veio daqui: ordem de deslocamento para um
+        // lugar **impossível**. O jogo anda até onde dá e desiste — e desistir
+        // é uma decisão tomada sem sortear, que foi exatamente o que os dois
+        // lados fizeram em ticks diferentes.
+        "mover" => new List<Passo>
+        {
+            new(5f,  "alistar os colonos",            AlistarTodos),
+            new(10f, "mandar para um lugar possível", () => Mandar(possivel: true)),
+            new(30f, "mandar para um lugar impossível", () => Mandar(possivel: false)),
+            new(70f, "mandar para outro impossível",  () => Mandar(possivel: false)),
+        },
+
         "combate" => new List<Passo>
         {
             new(5f,  "alistar os colonos",        AlistarTodos),
@@ -95,6 +108,84 @@ public static class RoteiroDeEmulacao
 
         _ => new List<Passo>(),
     };
+
+    /// <summary>
+    /// Ordem de deslocamento pela mesma porta do clique: o setter de
+    /// <c>TryTakeOrderedJob</c> é que vira comando de sessão.
+    ///
+    /// <para>O destino impossível é procurado de verdade, não inventado: varre
+    /// o mapa atrás de uma célula que o colono <b>não</b> alcança. Numa colônia
+    /// sem nenhuma — mapa todo aberto — o passo não faz nada e diz por quê, que
+    /// é melhor do que mandar para uma célula qualquer e parecer que testou.</para>
+    /// </summary>
+    static void Mandar(bool possivel)
+    {
+        var mapa = Find.CurrentMap;
+        if (mapa == null) return;
+
+        var colonos = mapa.mapPawns.FreeColonistsSpawned
+            .Where(p => p.drafter is { Drafted: true } && !p.Downed)
+            .ToList();
+
+        if (colonos.Count == 0) { Log.Message("[WithFriends/roteiro]   nenhum colono alistado"); return; }
+
+        var clicada = Alvo(mapa, colonos[0], possivel);
+        if (!clicada.IsValid)
+        {
+            Log.Message(
+                $"[WithFriends/roteiro]   não achei célula {(possivel ? "alcançável" : "impossível")} — passo pulado");
+            return;
+        }
+
+        // **O clique não vira destino direto.** Quando o jogador manda um
+        // alistado para um lugar impossível, o jogo resolve para o possível
+        // mais perto — `RCellFinder.BestOrderedGotoDestNear`, na interface de
+        // quem clicou. É esse resultado que viaja no comando, e é ele que
+        // deixa o pather com um destino na fronteira do alcançável, que é
+        // exatamente o caso que divergiu.
+        int mandados = 0;
+        foreach (var pawn in colonos)
+        {
+            var destino = RCellFinder.BestOrderedGotoDestNear(clicada, pawn);
+            if (!destino.IsValid) continue;
+
+            pawn.jobs.TryTakeOrderedJob(JobMaker.MakeJob(JobDefOf.Goto, destino), JobTag.Misc);
+            mandados++;
+        }
+
+        Log.Message(
+            $"[WithFriends/roteiro]   {mandados} colono(s) → perto de {clicada.x},{clicada.z} " +
+            $"({(possivel ? "alcançável" : "IMPOSSÍVEL — o jogo resolve para o possível mais perto")})");
+    }
+
+    /// <summary>
+    /// A célula "clicada". Varre em passo largo: queremos uma que sirva, não a
+    /// melhor.
+    ///
+    /// <para>"Possível" é uma célula que o colono alcança. "Impossível" é
+    /// qualquer uma que ele <b>não</b> alcança — parede, água funda, rocha
+    /// maciça, sala fechada. É o que um jogador acerta o tempo todo, e é o que
+    /// o jogo resolve para o possível mais perto.</para>
+    /// </summary>
+    static IntVec3 Alvo(Map mapa, Pawn colono, bool possivel)
+    {
+        var tamanho = mapa.Size;
+
+        for (int z = 2; z < tamanho.z - 2; z += 5)
+        for (int x = 2; x < tamanho.x - 2; x += 5)
+        {
+            var celula = new IntVec3(x, 0, z);
+            if (!celula.InBounds(mapa)) continue;
+            if (celula.DistanceTo(colono.Position) < 20f) continue;
+
+            bool alcanca = celula.Walkable(mapa)
+                        && colono.CanReach(celula, PathEndMode.OnCell, Danger.Deadly);
+
+            if (alcanca == possivel) return celula;
+        }
+
+        return IntVec3.Invalid;
+    }
 
     static void AlistarTodos() => AlistarTodos(true);
 

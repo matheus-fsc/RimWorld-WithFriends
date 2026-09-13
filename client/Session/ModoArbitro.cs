@@ -210,7 +210,8 @@ public static class ModoArbitro
                 : "") +
             (visivel ? " -emulacaovisivel" : "") +
             // Rastreio que só um lado faz não compara com nada.
-            (RastreioDeSangue.Ligado ? " -rastrearsangue" : "");
+            (RastreioDeSangue.Ligado ? " -rastrearsangue" : "") +
+            (RastreioDeCaminho.Ligado ? " -rastrearcaminho" : "");
 
         try
         {

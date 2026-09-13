@@ -23,6 +23,8 @@
 #   tools/dois-jogos.sh --so-segundo    abre só a segunda instância
 #   tools/dois-jogos.sh --matar         só fecha o que estiver aberto
 #   tools/dois-jogos.sh --arbitro NOME  a segunda instância vira árbitro
+#   tools/dois-jogos.sh --caminho      liga o rastreio de pathfinding nos dois
+#   tools/dois-jogos.sh --sangue       liga o rastreio de sangue nos dois
 #
 # O árbitro (docs/ARBITRO.md) toma a vaga do visitante e simula sem desenhar:
 # sem câmera, sem mouse, sem janela em foco. Serve para responder qual dos dois
@@ -30,8 +32,13 @@
 #
 #   tools/dois-jogos.sh --servidor --arbitro Colonia
 #
-# NOME é o save que ele abre, e precisa ser do MESMO PLANETA que o do anfitrião
-# — senão o coordenador recusa com "planeta divergente" e nada acontece.
+# NOME é o save que ele abre. Não precisa ser do mesmo planeta: o coordenador
+# hospeda vários e só avisa quem está sozinho no seu (ADR 0021).
+#
+# Os rastreios existem para a classe de divergência que a emulação NÃO alcança:
+# a que nasce da interface. Uma instância `-batchmode` não tem mouse, não abre
+# menu e não desenha — e portanto nunca exercita "a interface perguntou à
+# simulação". Para essas, são precisos dois jogos de verdade e alguém clicando.
 
 set -euo pipefail
 
@@ -45,6 +52,7 @@ COM_SERVIDOR=0
 SO_SEGUNDO=0
 SO_MATAR=0
 SAVE_ARBITRO=""
+RASTREIOS=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -61,6 +69,8 @@ while [[ $# -gt 0 ]]; do
             SAVE_ARBITRO="$1"
             ;;
         --arbitro=*)  SAVE_ARBITRO="${1#*=}" ;;
+        --caminho)    RASTREIOS="$RASTREIOS -rastrearcaminho" ;;
+        --sangue)     RASTREIOS="$RASTREIOS -rastrearsangue" ;;
         # O cabeçalho inteiro é a ajuda: imprime até a primeira linha que não
         # é comentário, para não quebrar quando o texto crescer.
         -h|--help)    sed -n '2,/^[^#]/p' "${BASH_SOURCE[0]}" | sed '$d'; exit 0 ;;
@@ -115,7 +125,7 @@ cd "$JOGO"
 
 if [[ $SO_SEGUNDO -eq 0 ]]; then
     echo "== abrindo jogador 1"
-    nohup ./RimWorldLinux -logFile "$LOG_P1" > /dev/null 2>&1 &
+    nohup ./RimWorldLinux $RASTREIOS -logFile "$LOG_P1" > /dev/null 2>&1 &
     sleep 3
 fi
 
@@ -123,12 +133,12 @@ if [[ -n "$SAVE_ARBITRO" ]]; then
     echo "== abrindo o ÁRBITRO  (save: $SAVE_ARBITRO, pasta: $DADOS_P2)"
     nohup ./RimWorldLinux \
         -batchmode -nographics \
-        -arbitro -arbitrosave="$SAVE_ARBITRO" \
+        -arbitro -arbitrosave="$SAVE_ARBITRO" $RASTREIOS \
         -savedatafolder="$DADOS_P2" -logFile "$LOG_P2" > /dev/null 2>&1 &
     SEGUNDO="árbitro"
 else
     echo "== abrindo jogador 2  (pasta de dados: $DADOS_P2)"
-    nohup ./RimWorldLinux -savedatafolder="$DADOS_P2" -logFile "$LOG_P2" > /dev/null 2>&1 &
+    nohup ./RimWorldLinux $RASTREIOS -savedatafolder="$DADOS_P2" -logFile "$LOG_P2" > /dev/null 2>&1 &
     SEGUNDO="jogador 2"
 fi
 
