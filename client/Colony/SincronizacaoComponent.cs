@@ -167,6 +167,11 @@ public class SincronizacaoComponent : GameComponent
         {
             Cursor = cursor,
             Planeta = World.IdentidadeDoPlaneta.Calcular(),
+
+            // A descrição vai junto porque o hash sozinho não ensina ninguém a
+            // gerar o mesmo planeta. É ela que o coordenador repassa a quem
+            // ficou sozinho no seu.
+            PlanetaLegivel = World.IdentidadeDoPlaneta.Descrever(),
         });
         MundoPublicador.PublicarProprioAssentamento();
     }
@@ -275,15 +280,16 @@ public class SincronizacaoComponent : GameComponent
     {
         Log.Warning($"[WithFriends] erro do coordenador ({erro.Codigo}): {erro.Explicacao}");
 
-        // Planeta divergente não derruba: o jogador continua conectado,
-        // guardando checkpoint e jogando. Só o mundo compartilhado fica fora.
-        bool fatal = erro.Codigo != CodigoErro.PlanetaDivergente;
+        // Planeta diferente não derruba e nem é falha: o jogador continua
+        // conectado, guardando checkpoint e jogando. É informação — ele só não
+        // divide mapa-mundo com quem está em outro planeta (§11).
+        bool fatal = erro.Codigo != CodigoErro.SozinhoNoPlaneta;
 
         Find.LetterStack.ReceiveLetter(
-            fatal ? "With Friends: conexão encerrada" : "With Friends: planeta diferente",
+            fatal ? "With Friends: conexão encerrada" : "With Friends: você está sozinho neste planeta",
             erro.Explicacao +
-            (fatal ? "" : "\n\nSeu planeta: " + World.IdentidadeDoPlaneta.Descrever()),
-            LetterDefOf.NegativeEvent);
+            (fatal ? "" : "\n\nO seu: " + World.IdentidadeDoPlaneta.Descrever()),
+            fatal ? LetterDefOf.NegativeEvent : LetterDefOf.NeutralEvent);
 
         if (fatal) WithFriendsMod.Cliente.Desconectar();
     }

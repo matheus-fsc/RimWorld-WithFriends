@@ -129,13 +129,12 @@ public static class EstaticosDaSessao
         Campo(typeof(Region), "nextId", 1);
 
         // As quatro rotações candidatas da geração de estruturas: estático,
-        // embaralhado no lugar, e sem ordem canônica por chamada — remendar o
-        // método que o embaralha derruba o Mono na hora de compilá-lo (duas
-        // sobrecargas, uma com `ref Rot4?` e dois `out`; a instância inteira
-        // morre em SIGSEGV antes de o mod carregar). Zerar o campo na carga é o
-        // que dá para fazer sem pagar isso, e cobre o caso que importa: os dois
-        // lados entram na visita com a mesma ordem, e daí em diante só a
-        // geração — que roda igual nos dois — mexe nela.
+        // embaralhado no lugar, e sem ordem canônica por chamada.
+        //
+        // Aqui basta zerar na carga, em vez de remendar o método que embaralha:
+        // ele só roda na geração de estruturas, que acontece dentro do tick e
+        // igual nos dois lados. Os dois entram na visita com a mesma ordem, e
+        // daí em diante ninguém de fora da simulação encosta nela.
         feitos += CanonizarRotacoes(faltando);
 
         // Onde o carregamento de coisas para arrastar parou da última vez.

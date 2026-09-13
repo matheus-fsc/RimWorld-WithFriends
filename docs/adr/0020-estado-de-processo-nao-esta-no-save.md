@@ -132,6 +132,6 @@ raid` e `wf comparar`, sem ninguém clicando.
 - Guardas novas aparecem no relatório de `GuardasDeDeterminismo`: guarda que
   nunca dispara depois de uma visita inteira é suspeita.
 - Fora de visita nada disto roda: mod não muda o jogo de quem joga sozinho.
-- Remendar `SymbolResolver_SingleThing.FindBestSpawnCellForNonItem` derruba o
-  Mono (SIGSEGV antes de o mod carregar — duas sobrecargas, uma com `ref Rot4?`
-  e dois `out`). O campo dele é canonizado na carga, sem remendo.
+- `SymbolResolver_SingleThing.tmpRotations` é canonizado na carga, sem remendo:
+  o método que a embaralha só roda na geração de estruturas, dentro do tick, e
+  ninguém de fora da simulação encosta nela.

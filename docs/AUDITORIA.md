@@ -629,9 +629,9 @@ sobrevivem ao recarregamento e são lidas pela simulação viraram guarda:
 | `SymbolResolver_SingleThing.tmpRotations` | rotação na geração | canonizada na carga¹ |
 | `CellFinder.mapEdgeCells` | ponto de chegada de assalto | zerada na carga |
 
-¹ remendar o método que a embaralha derruba o Mono — duas sobrecargas, uma com
-`ref Rot4?` e dois `out`, e a instância morre em SIGSEGV antes de o mod
-carregar. Zerar o campo cobre o que importa.
+¹ basta zerar na carga: o método que a embaralha só roda na geração de
+estruturas, dentro do tick e igual nos dois lados. Não há caminho de interface
+que a toque.
 
 As que **não** precisam de nada, e é bom saber por quê: `FireUtility.fireList`,
 `RoomTempTracker.equalizeCells`, `PregnancyUtility.tmpGenesShuffled` e os vários

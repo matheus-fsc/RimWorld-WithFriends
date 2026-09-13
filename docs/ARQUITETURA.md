@@ -137,11 +137,13 @@ Nunca acontece do nada. O jogador sabe que vai esperar, sabe por quê, e escolhe
 
 O mapa-mundo é a exceção barata: ele é **determinístico a partir da semente e das opções de geração**, todas escolhidas pelo jogador na criação do mundo. Dois jogadores com a mesma semente e a mesma cobertura têm o mesmo planeta, tile por tile.
 
-Então o planeta nunca trafega. O que trafega é a **identidade** dele — um hash das variáveis de geração — conferida na entrada do mundo compartilhado.
+Então o planeta nunca trafega. O que trafega é a **identidade** dele — um hash das variáveis de geração — declarada por cada cliente ao sincronizar o cursor.
 
 Isso é requisito, não otimização: eventos de mundo carregam **índice de tile**, não coordenada. Em outro planeta o mesmo índice aponta para outro lugar, ou não existe. Índice de tile inválido não dá erro de validação — entra direto no `WorldGrid` e quebra o jogo longe da causa.
 
-Quem tem planeta diferente continua logado, jogando e guardando checkpoint; só fica de fora do mundo compartilhado, com motivo legível (§8, §11).
+**A identidade pertence ao fato, não ao coordenador.** Cada evento do log sabe em que planeta ele vale, e cada cliente só recebe os do seu. Vários planetas coexistem no mesmo coordenador sem que nenhum recuse os outros — quem está num planeta simplesmente não vê quem está em outro, que é a verdade da situação (ADR 0021).
+
+Quem está sozinho no planeta dele continua logado, jogando e guardando checkpoint; o coordenador só o avisa, uma vez, **com a descrição do planeta dos outros** — semente, cobertura, chuva — que é o que permite regerar e encontrar (§8, §11).
 
 ---
 

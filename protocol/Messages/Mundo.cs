@@ -165,18 +165,29 @@ public sealed class MundoSincronizacaoCursor : IMessage
     /// </summary>
     public string Planeta { get; init; } = "";
 
+    /// <summary>
+    /// O mesmo planeta em português — semente, cobertura, chuva, temperatura.
+    ///
+    /// <para>O hash diz se dois planetas são o mesmo; ele não diz <b>como
+    /// gerar</b> o do outro. Sem esta linha, "vocês estão em planetas
+    /// diferentes" é um aviso que ninguém consegue atender.</para>
+    /// </summary>
+    public string PlanetaLegivel { get; init; } = "";
+
     public MessageId Id => MessageId.MundoSincronizacaoCursor;
 
     public void Write(BinaryWriter w)
     {
         w.Write(Cursor);
         w.Write(Planeta);
+        w.Write(PlanetaLegivel);
     }
 
     public static MundoSincronizacaoCursor Read(BinaryReader r) => new()
     {
         Cursor = r.ReadInt64(),
         Planeta = r.ReadString(),
+        PlanetaLegivel = r.ReadString(),
     };
 }
 

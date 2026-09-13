@@ -25,6 +25,17 @@ public static class MundoPublicador
         var cliente = WithFriendsMod.Cliente;
         if (!cliente.Conectado || Current.Game == null) return;
 
+        // **Durante uma visita, não.**
+        //
+        // O visitante está dentro da partida do anfitrião: o primeiro
+        // assentamento da facção do jogador que ele acha ali é o do
+        // **anfitrião**, no planeta do anfitrião. Publicar isso afirmaria o
+        // assentamento alheio como próprio, com o id de colônia do visitante.
+        //
+        // O checkpoint automático publica junto, e ele continua correndo
+        // durante a visita — então isto não é hipotético.
+        if (Session.VisitaEmAndamento.Ativa) return;
+
         var assentamento = Find.WorldObjects.Settlements
             .FirstOrDefault(s => s.Faction == Faction.OfPlayer);
         if (assentamento == null) return;

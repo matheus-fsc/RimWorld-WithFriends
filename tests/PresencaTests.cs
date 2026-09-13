@@ -11,8 +11,12 @@ public class PresencaTests
     {
         public string PlayerId { get; init; } = "";
         public string DisplayName { get; init; } = "";
+        public string Planeta { get; set; } = "";
+        public string PlanetaLegivel { get; set; } = "";
         public List<IMessage> Recebidas { get; } = new();
+        public int Reconsideracoes { get; private set; }
 
+        public void ReconsiderarPlaneta() => Reconsideracoes++;
         public void Entregar(IMessage mensagem) => Recebidas.Add(mensagem);
     }
 
@@ -93,11 +97,69 @@ public class PresencaTests
         Assert.Single(sadio.Recebidas);
     }
 
+    [Fact]
+    public void Fato_de_mundo_so_chega_a_quem_esta_no_mesmo_planeta()
+    {
+        // Um evento diz "tile 113533", e tile é índice, não coordenada. Em
+        // outro planeta esse índice aponta para outro lugar, ou não existe.
+        var presenca = new Presenca();
+        var aqui = new DestinatarioFalso { PlayerId = "p1", Planeta = "sha256:terra" };
+        var la = new DestinatarioFalso { PlayerId = "p2", Planeta = "sha256:marte" };
+        presenca.Entrou(aqui);
+        presenca.Entrou(la);
+
+        int antesLa = la.Recebidas.Count;
+        presenca.DifundirNoPlaneta(new MundoEvento(), "sha256:terra");
+
+        Assert.Single(aqui.Recebidas.OfType<MundoEvento>());
+        Assert.Equal(antesLa, la.Recebidas.Count);
+    }
+
+    [Fact]
+    public void Quem_esta_em_outro_planeta_e_listado_para_o_aviso()
+    {
+        var presenca = new Presenca();
+        var sozinho = new DestinatarioFalso { PlayerId = "p1", Planeta = "sha256:terra" };
+        var outro = new DestinatarioFalso { PlayerId = "p2", Planeta = "sha256:marte" };
+        var semDeclarar = new DestinatarioFalso { PlayerId = "p3" };
+        presenca.Entrou(sozinho);
+        presenca.Entrou(outro);
+        presenca.Entrou(semDeclarar);
+
+        var emOutro = presenca.EmOutroPlaneta("sha256:terra");
+
+        // Quem ainda não declarou não conta: não se pede a ninguém que gere um
+        // planeta que o coordenador não sabe qual é.
+        Assert.Single(emOutro);
+        Assert.Equal("p2", emOutro[0].PlayerId);
+        Assert.Equal(1, presenca.NoPlaneta("sha256:terra"));
+    }
+
+    [Fact]
+    public void Sair_faz_todo_mundo_reconsiderar_o_planeta()
+    {
+        // Quem sobrou pode ter acabado de ficar sozinho no planeta dele, e
+        // ninguém lhe diria isso: a mudança aconteceu na conexão do outro.
+        var presenca = new Presenca();
+        var fica = new DestinatarioFalso { PlayerId = "p1", Planeta = "sha256:terra" };
+        var vai = new DestinatarioFalso { PlayerId = "p2", Planeta = "sha256:terra" };
+        presenca.Entrou(fica);
+        presenca.Entrou(vai);
+
+        int antes = fica.Reconsideracoes;
+        presenca.Saiu(vai);
+
+        Assert.True(fica.Reconsideracoes > antes);
+    }
+
     sealed class DestinatarioQuebrado : IDestinatario
     {
         public string PlayerId { get; init; } = "";
         public string DisplayName => "";
+        public string Planeta => "";
+        public string PlanetaLegivel => "";
 
+        public void ReconsiderarPlaneta() => throw new IOException("socket morto");
         public void Entregar(IMessage mensagem) => throw new IOException("socket morto");
     }
 }

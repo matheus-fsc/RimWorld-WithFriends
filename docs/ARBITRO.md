@@ -80,8 +80,10 @@ RimWorldLinux -batchmode -nographics -arbitro -arbitrosave=NomeDoSave \
 
 - `-arbitro` liga o modo: não desenha, volume zero, conecta sozinho, aceita o
   convite sozinho e **nunca propõe comando**.
-- `-arbitrosave=NOME` é a colônia que ele abre. Precisa ser **do mesmo planeta**
-  que a do anfitrião, senão o coordenador recusa com "planeta divergente".
+- `-arbitrosave=NOME` é a colônia que ele abre. Para o árbitro dá no mesmo se
+  ela é do planeta do anfitrião: ele atravessa para a partida do anfitrião
+  assim que a visita começa, e o mapa-mundo não interessa a ninguém numa
+  emulação. Se os planetas diferirem, o coordenador só avisa (ADR 0021).
 - `-savedatafolder` separa o perfil, como na segunda instância humana.
 
 Depois é o fluxo normal: o anfitrião convida, e o árbitro aceita sem que ninguém

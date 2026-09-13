@@ -9,6 +9,35 @@ public interface IDestinatario
 {
     string PlayerId { get; }
     string DisplayName { get; }
+
+    /// <summary>
+    /// Em que planeta este cliente está agora — o hash das variáveis de
+    /// geração do mundo que ele tem aberto. Vazio até ele declarar.
+    ///
+    /// <para>Muda quando ele carrega outra partida, inclusive ao atravessar
+    /// para a colônia de outro jogador numa visita. Por isso é propriedade da
+    /// conexão, não do registro: o planeta de alguém é um fato do presente.</para>
+    /// </summary>
+    string Planeta { get; }
+
+    /// <summary>
+    /// O mesmo planeta em português: semente, cobertura, chuva. É o que
+    /// permite a quem está sozinho no seu planeta saber <b>o que gerar</b>
+    /// para encontrar os outros.
+    /// </summary>
+    string PlanetaLegivel { get; }
+
+    /// <summary>
+    /// Reconsidere se ainda está sozinho no seu planeta.
+    ///
+    /// <para>A companhia de alguém muda quando <b>outra</b> conexão declara
+    /// planeta ou desaparece — não quando esta faz alguma coisa. Sem este
+    /// empurrão, quem chegou primeiro nunca saberia que o segundo entrou em
+    /// outro planeta, e quem ficou sozinho depois de todo mundo sair
+    /// continuaria achando que está acompanhado.</para>
+    /// </summary>
+    void ReconsiderarPlaneta();
+
     void Entregar(IMessage mensagem);
 }
 
@@ -72,6 +101,62 @@ public sealed class Presenca
 
         Difundir(Aviso(destinatario, online: false), exceto: destinatario.PlayerId);
         Console.WriteLine($"presença: {destinatario.DisplayName} ({destinatario.PlayerId}) offline — {conectados.Count} conectado(s)");
+
+        // Quem sobrou pode ter ficado sozinho no planeta dele agora.
+        ReconsiderarPlanetas();
+    }
+
+    /// <summary>
+    /// Quem está online em <b>outro</b> planeta que não este. Vazio significa
+    /// "ninguém a avisar": ou você está acompanhado, ou está sozinho no
+    /// coordenador, e nenhum dos dois é problema.
+    /// </summary>
+    public IReadOnlyList<IDestinatario> EmOutroPlaneta(string planeta) =>
+        conectados.Values
+            .Where(d => d.Planeta.Length > 0 && d.Planeta != planeta)
+            .ToArray();
+
+    /// <summary>Quantos estão online neste planeta, contando você.</summary>
+    public int NoPlaneta(string planeta) =>
+        conectados.Values.Count(d => d.Planeta == planeta);
+
+    /// <summary>
+    /// Manda todo mundo reconsiderar com quem divide planeta. Chamado quando a
+    /// composição muda: alguém declarou planeta, alguém saiu.
+    /// </summary>
+    public void ReconsiderarPlanetas()
+    {
+        foreach (var destinatario in conectados.Values)
+        {
+            try { destinatario.ReconsiderarPlaneta(); }
+            catch (Exception e)
+            {
+                Console.WriteLine($"reconsideração de planeta falhou para {destinatario.PlayerId}: {e.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Difunde só para quem está no mesmo planeta.
+    ///
+    /// <para>Fato de mundo carrega índice de tile, e índice de tile só
+    /// significa a mesma coisa no mesmo planeta. Difundir para todos entregaria
+    /// coordenada sem sentido a quem está em outro — que é exatamente o que a
+    /// checagem de <c>InBounds</c> do cliente existe para aparar, e é melhor
+    /// nunca chegar lá.</para>
+    /// </summary>
+    public void DifundirNoPlaneta(IMessage mensagem, string planeta, string? exceto = null)
+    {
+        foreach (var destinatario in conectados.Values)
+        {
+            if (destinatario.PlayerId == exceto) continue;
+            if (destinatario.Planeta != planeta) continue;
+            try { destinatario.Entregar(mensagem); }
+            catch (Exception e)
+            {
+                Console.WriteLine($"difusão falhou para {destinatario.PlayerId}: {e.Message}");
+            }
+        }
     }
 
     public void Difundir(IMessage mensagem, string? exceto = null)

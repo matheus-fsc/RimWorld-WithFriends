@@ -44,11 +44,23 @@ public sealed class Conexao : IDestinatario
     public string DisplayName { get; private set; } = "";
 
     /// <summary>
-    /// Enquanto o planeta não for conferido, nada de mundo trafega. Índice de
-    /// tile de outro planeta não significa nada — e aplicar um faz o jogo do
-    /// outro lado quebrar longe da causa.
+    /// Em que planeta este cliente está agora. Declarado no
+    /// <c>mundo.sincronizacao_cursor</c>, e redeclarado toda vez que ele
+    /// carrega outra partida — inclusive ao atravessar para a colônia de outro
+    /// jogador numa visita.
+    ///
+    /// <para>Vazio até a primeira declaração: antes disso não há como saber a
+    /// que planeta um fato pertenceria, e publicar é recusado.</para>
     /// </summary>
-    bool planetaCompativel;
+    public string Planeta { get; private set; } = "";
+
+    public string PlanetaLegivel { get; private set; } = "";
+
+    /// <summary>
+    /// O planeta sobre o qual já avisamos que ninguém mais está. Guardado para
+    /// não repetir a carta a cada sincronização.
+    /// </summary>
+    string planetaJaAvisado = "";
 
     /// <summary>
     /// Envio é serializado: a difusão de eventos vem de outra thread, e duas
@@ -210,44 +222,52 @@ public sealed class Conexao : IDestinatario
             {
                 var pedido = envelope.Decode(MundoSincronizacaoCursor.Read);
 
-                string? divergencia = mundo.ConferirPlaneta(pedido.Planeta);
-                if (divergencia != null)
+                if (string.IsNullOrEmpty(pedido.Planeta))
                 {
-                    // Não derruba ninguém: só recusa participar do mundo
-                    // compartilhado, com motivo legível (§8, §9.1, §11).
-                    Console.WriteLine($"[{origem}] planeta divergente: {divergencia}");
-                    planetaCompativel = false;
-                    Entregar(new SistemaErro
-                    {
-                        Codigo = CodigoErro.PlanetaDivergente,
-                        Explicacao = divergencia,
-                    });
+                    // Sem planeta declarado não há a que pertencer. Continua
+                    // logado e jogando — só fora do mundo compartilhado (§11).
+                    Console.WriteLine($"[{origem}] sincronização sem planeta declarado — ignorada");
                     break;
                 }
 
-                planetaCompativel = true;
+                Planeta = pedido.Planeta;
+                PlanetaLegivel = pedido.PlanetaLegivel;
+
                 long cursor = pedido.Cursor;
-                var pendentes = mundo.Desde(cursor);
-                Console.WriteLine($"[{origem}] cursor={cursor} → {pendentes.Count} evento(s) de mundo");
+                var pendentes = mundo.Desde(cursor, Planeta);
+                Console.WriteLine(
+                    $"[{origem}] cursor={cursor} planeta={LogDeEventos.Curto(Planeta)} " +
+                    $"→ {pendentes.Count} evento(s) de mundo");
+
                 foreach (var evento in pendentes)
                     Entregar(new MundoEvento { Evento = evento });
+
+                // O planeta desta conexão pode ter acabado de mudar: quem já
+                // estava online precisa reconsiderar a própria companhia.
+                presenca.ReconsiderarPlanetas();
                 break;
             }
 
             case MessageId.MundoPublicar:
             {
-                if (!planetaCompativel)
+                if (Planeta.Length == 0)
                 {
-                    Console.WriteLine($"[{origem}] evento de mundo descartado: planeta divergente");
+                    Console.WriteLine($"[{origem}] evento de mundo descartado: planeta não declarado");
                     break;
                 }
 
                 var proposta = envelope.Decode(MundoPublicar.Read);
                 // O servidor numera; o autor é sempre quem está na conexão,
-                // nunca o que o cliente diz ser.
-                var evento = mundo.Publicar(PlayerId, proposta.Tipo, proposta.Payload);
-                Console.WriteLine($"[{origem}] evento seq={evento.Seq} {evento.Tipo} por {evento.Autor}");
-                presenca.Difundir(new MundoEvento { Evento = evento });
+                // nunca o que o cliente diz ser. O planeta também é o da
+                // conexão: o fato pertence a onde ele foi afirmado.
+                var evento = mundo.Publicar(PlayerId, proposta.Tipo, proposta.Payload, Planeta);
+                Console.WriteLine(
+                    $"[{origem}] evento seq={evento.Seq} {evento.Tipo} por {evento.Autor} " +
+                    $"em {LogDeEventos.Curto(Planeta)}");
+
+                // Só quem está no mesmo planeta: índice de tile não significa
+                // nada fora dele.
+                presenca.DifundirNoPlaneta(new MundoEvento { Evento = evento }, Planeta);
                 break;
             }
 
@@ -367,5 +387,69 @@ public sealed class Conexao : IDestinatario
                 Console.WriteLine($"[{origem}] mensagem não tratada: {envelope.Id} ({envelope.Payload.Length} bytes) — ignorada");
                 break;
         }
+    }
+
+    /// <summary>
+    /// Avisa quando este jogador é o único do planeta dele e há gente em outro.
+    ///
+    /// <para><b>O que mudou.</b> O coordenador guardava <b>um</b> planeta, o do
+    /// primeiro cliente que aparecesse, e recusava todos os outros para sempre.
+    /// Bastou um mundo de teste conectar uma vez para o valor gravado virar
+    /// fóssil: dias depois, com os dois jogadores no mesmo planeta novo, o
+    /// coordenador recusava <b>os dois</b> em nome de um planeta que ninguém
+    /// mais tinha. Não havia como desfazer sem apagar arquivo na mão.</para>
+    ///
+    /// <para>Agora o planeta é propriedade do <b>fato</b>, não do coordenador:
+    /// cada evento sabe em que planeta vale, e cada cliente só recebe os do seu.
+    /// Vários planetas coexistem, e nenhum deles tem poder de recusar os
+    /// outros. Não há mais o que ficar velho.</para>
+    ///
+    /// <para>O que sobra é informação, e ela importa: dois amigos que geraram
+    /// mundos diferentes não veem um ao outro, e sem aviso isso parece o mod
+    /// quebrado. Por isso o aviso carrega a <b>descrição</b> do planeta dos
+    /// outros — semente, cobertura, chuva — que é o que permite regerar e
+    /// encontrar. Uma vez por planeta, não a cada sincronização.</para>
+    /// </summary>
+    public void ReconsiderarPlaneta()
+    {
+        if (Planeta.Length == 0) return;
+
+        var outros = presenca.EmOutroPlaneta(Planeta);
+        if (outros.Count == 0 || presenca.NoPlaneta(Planeta) > 1)
+        {
+            // Acompanhado, ou sozinho no coordenador: nada a dizer. Zera para
+            // que o aviso volte a valer se a situação mudar.
+            planetaJaAvisado = "";
+            return;
+        }
+
+        if (planetaJaAvisado == Planeta) return;
+        planetaJaAvisado = Planeta;
+
+        var descricoes = outros
+            .Select(o => $"  {o.DisplayName}: {(o.PlanetaLegivel.Length > 0 ? o.PlanetaLegivel : LogDeEventos.Curto(o.Planeta))}")
+            .Distinct();
+
+        string explicacao =
+            "Você é o único neste planeta, então o mapa-mundo não vai mostrar " +
+            "as colônias de mais ninguém — e as suas não aparecem para eles.\n\n" +
+            "Um evento de mundo diz \"assentamento no tile 113533\", e tile é " +
+            "índice, não coordenada: em outro planeta esse índice aponta para " +
+            "outro lugar, ou não existe.\n\n" +
+            "Quem está online, e em que planeta:\n" +
+            string.Join("\n", descricoes) + "\n\n" +
+            "Para jogarem no mesmo mundo, gerem o planeta com a mesma semente e " +
+            "as mesmas opções. Nada do que você já jogou se perde por isso: sua " +
+            "colônia continua sua, e o coordenador guarda os dois planetas.";
+
+        Console.WriteLine(
+            $"{DisplayName} está sozinho no planeta {LogDeEventos.Curto(Planeta)}; " +
+            $"{outros.Count} em outro(s) — avisado");
+
+        Entregar(new SistemaErro
+        {
+            Codigo = CodigoErro.SozinhoNoPlaneta,
+            Explicacao = explicacao,
+        });
     }
 }

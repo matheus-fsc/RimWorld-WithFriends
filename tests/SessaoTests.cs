@@ -19,7 +19,10 @@ public class SessaoTests
     {
         public string PlayerId { get; init; } = "";
         public string DisplayName => PlayerId;
+        public string Planeta => "";
+        public string PlanetaLegivel => "";
         public List<IMessage> Recebidas { get; } = new();
+        public void ReconsiderarPlaneta() { }
         public void Entregar(IMessage mensagem) => Recebidas.Add(mensagem);
     }
 

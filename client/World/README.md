@@ -29,9 +29,21 @@ outro planeta aponta para outro lugar ou não existe — e índice inválido ent
 direto no `WorldGrid` e quebra o jogo longe da causa.
 
 Por isso `IdentidadeDoPlaneta` hasheia as variáveis de geração (semente,
-cobertura, chuva, temperatura, população, densidade de marcos, poluição) e o
-coordenador guarda o planeta de registro do mundo. Quem chega com outro
-continua logado e jogando; só fica fora do mundo compartilhado (§8, §11).
+cobertura, chuva, temperatura, população, densidade de marcos, poluição), e
+cada cliente declara o seu no `mundo.sincronizacao_cursor` — de novo a cada
+partida carregada, porque atravessar para a colônia de outro jogador numa
+visita muda o planeta de quem atravessou.
+
+**O planeta pertence ao fato, não ao coordenador** (ADR 0021). Cada evento do
+log sabe em que planeta vale, e cada cliente só recebe os do seu. Vários
+planetas coexistem sem que nenhum recuse os outros: quem está num simplesmente
+não vê quem está em outro. Quem ficar sozinho no seu recebe uma carta, uma vez,
+com a descrição do planeta dos outros — semente, cobertura, chuva — que é o que
+permite regerar e encontrar.
+
+`MundoPublicador` não publica durante uma visita: lá dentro o "primeiro
+assentamento da facção do jogador" é o do **anfitrião**, e publicá-lo afirmaria
+o assentamento alheio como próprio.
 
 `MundoAplicador` ainda confere `WorldGrid.InBounds` antes de criar qualquer
 objeto: defesa em profundidade, porque um payload inválido nunca pode virar

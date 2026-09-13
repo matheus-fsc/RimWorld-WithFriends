@@ -23,17 +23,32 @@ public sealed class LogDeEventos
         public ushort Tipo { get; set; }
         public string Payload { get; set; } = "";
         public long TimestampLogico { get; set; }
+
+        /// <summary>
+        /// O planeta sob o qual o fato foi afirmado. Ausente nas linhas
+        /// gravadas antes de o log passar a segregar por planeta: essas herdam
+        /// o planeta de registro (ver <c>planetaDeRegistro</c>).
+        /// </summary>
+        public string? Planeta { get; set; }
     }
 
     static readonly JsonSerializerOptions Json = new() { WriteIndented = false };
     static readonly UTF8Encoding Utf8SemBom = new(encoderShouldEmitUTF8Identifier: false);
 
+    /// <summary>Um fato e o planeta em que ele significa alguma coisa.</summary>
+    readonly record struct Anotado(EventoMundo Evento, string Planeta);
+
     readonly object trava = new();
-    readonly List<EventoMundo> eventos = new();
+    readonly List<Anotado> eventos = new();
     readonly string? caminho;
 
     long ultimoSeq;
-    string planeta = "";
+
+    /// <summary>
+    /// O planeta que o log adotou antes de segregar por planeta. Serve só para
+    /// atribuir dono às linhas antigas, que não trazem o campo.
+    /// </summary>
+    string planetaDeRegistro = "";
 
     /// <param name="caminho">
     /// Arquivo <c>.jsonl</c> onde o log é gravado. <c>null</c> mantém tudo em
@@ -48,56 +63,28 @@ public sealed class LogDeEventos
     public long UltimoSeq { get { lock (trava) return ultimoSeq; } }
 
     /// <summary>
-    /// Planeta deste mundo. O primeiro cliente a sincronizar define; os
-    /// demais precisam bater. Vazio = ainda não definido.
+    /// O planeta que o log adotou antes de passar a segregar por planeta.
+    /// Diagnóstico e migração; não é lei para ninguém.
     /// </summary>
-    public string Planeta { get { lock (trava) return planeta; } }
+    public string PlanetaDeRegistro { get { lock (trava) return planetaDeRegistro; } }
 
-    /// <summary>
-    /// Confere (e adota, se ainda não houver) a identidade do planeta.
-    /// Devolve <c>null</c> se está tudo certo, ou o motivo legível da recusa.
-    ///
-    /// Recusar é só para eventos de mundo: quem tem outro planeta continua
-    /// logado, jogando e guardando checkpoint (§8, §11). O que ele não pode é
-    /// publicar coordenadas que não significam nada para os outros.
-    /// </summary>
-    public string? ConferirPlaneta(string declarado)
+    /// <summary>Quantos planetas distintos têm fato neste log.</summary>
+    public IReadOnlyList<string> PlanetasComEventos
     {
-        if (string.IsNullOrEmpty(declarado))
-            return "O cliente não declarou o planeta.";
-
-        lock (trava)
-        {
-            if (planeta.Length == 0)
-            {
-                planeta = declarado;
-                Anotar(declarado);
-                Console.WriteLine($"Planeta deste mundo definido como {declarado}");
-                return null;
-            }
-
-            if (planeta == declarado) return null;
-
-            return
-                $"O planeta não é o mesmo: este mundo é {planeta}, o seu é {declarado}. " +
-                "Os assentamentos são identificados por índice de tile, que só significa " +
-                "a mesma coisa no mesmo planeta. Gere o mundo com a mesma semente e as " +
-                "mesmas opções de geração do primeiro jogador.";
-        }
-    }
-
-    void Anotar(string planetaNovo)
-    {
-        if (caminho == null) return;
-        string arquivo = Path.Combine(Path.GetDirectoryName(caminho)!, "planeta.txt");
-        Directory.CreateDirectory(Path.GetDirectoryName(caminho)!);
-        File.WriteAllText(arquivo, planetaNovo, Utf8SemBom);
+        get { lock (trava) return eventos.Select(e => e.Planeta).Distinct().ToArray(); }
     }
 
     public int Contagem { get { lock (trava) return eventos.Count; } }
 
-    /// <summary>Numera, grava e devolve o fato já ordenado.</summary>
-    public EventoMundo Publicar(string autor, TipoEventoMundo tipo, byte[] payload)
+    /// <summary>
+    /// Numera, grava e devolve o fato já ordenado, junto do planeta em que ele
+    /// significa alguma coisa.
+    ///
+    /// <para>A numeração é global e monotônica, atravessando planetas: assim o
+    /// cursor de um jogador continua válido mesmo que o coordenador passe a
+    /// hospedar outro planeta no meio do caminho.</para>
+    /// </summary>
+    public EventoMundo Publicar(string autor, TipoEventoMundo tipo, byte[] payload, string planeta)
     {
         lock (trava)
         {
@@ -110,20 +97,31 @@ public sealed class LogDeEventos
                 TimestampLogico = DateTime.UtcNow.Ticks,
             };
 
-            eventos.Add(evento);
-            Anexar(evento);
+            eventos.Add(new Anotado(evento, planeta));
+            Anexar(evento, planeta);
             return evento;
         }
     }
 
-    /// <summary>Tudo o que veio depois do cursor do cliente, em ordem.</summary>
-    public IReadOnlyList<EventoMundo> Desde(long cursor)
+    /// <summary>
+    /// Tudo o que veio depois do cursor <b>e vale neste planeta</b>, em ordem.
+    ///
+    /// <para>O filtro por planeta é a regra, não uma otimização: um evento diz
+    /// "tile 113533", e tile é índice, não coordenada. Entregar a quem está em
+    /// outro planeta é entregar uma coordenada que aponta para outro lugar —
+    /// ou para lugar nenhum.</para>
+    /// </summary>
+    public IReadOnlyList<EventoMundo> Desde(long cursor, string planeta)
     {
         lock (trava)
-            return eventos.Where(e => e.Seq > cursor).OrderBy(e => e.Seq).ToArray();
+            return eventos
+                .Where(e => e.Evento.Seq > cursor && e.Planeta == planeta)
+                .Select(e => e.Evento)
+                .OrderBy(e => e.Seq)
+                .ToArray();
     }
 
-    void Anexar(EventoMundo evento)
+    void Anexar(EventoMundo evento, string planeta)
     {
         if (caminho == null) return;
 
@@ -135,22 +133,26 @@ public sealed class LogDeEventos
             Tipo = (ushort)evento.Tipo,
             Payload = Convert.ToBase64String(evento.Payload),
             TimestampLogico = evento.TimestampLogico,
+            Planeta = planeta,
         };
         File.AppendAllText(caminho, JsonSerializer.Serialize(linha, Json) + "\n", Utf8SemBom);
     }
 
+    /// <summary>Hash de planeta encurtado, para caber numa linha de log.</summary>
+    public static string Curto(string planeta) =>
+        string.IsNullOrEmpty(planeta) ? "(sem planeta)"
+        : planeta.Length > 22 ? planeta[..22] + "…"
+        : planeta;
+
     void Carregar()
     {
-        // O planeta é lido primeiro: um mundo pode ter planeta definido e
-        // nenhum evento ainda.
+        // O planeta de registro é lido primeiro: é ele que dá dono às linhas
+        // gravadas antes de o log passar a segregar por planeta.
         string arquivoPlaneta = Path.Combine(Path.GetDirectoryName(caminho!)!, "planeta.txt");
-        if (File.Exists(arquivoPlaneta)) planeta = File.ReadAllText(arquivoPlaneta).Trim();
+        if (File.Exists(arquivoPlaneta))
+            planetaDeRegistro = File.ReadAllText(arquivoPlaneta).Trim();
 
-        if (!File.Exists(caminho))
-        {
-            if (planeta.Length > 0) Console.WriteLine($"Log de mundo: vazio, planeta {planeta}");
-            return;
-        }
+        if (!File.Exists(caminho)) return;
 
         foreach (string linha in File.ReadAllLines(caminho!))
         {
@@ -160,14 +162,18 @@ public sealed class LogDeEventos
                 var lido = JsonSerializer.Deserialize<LinhaEvento>(linha, Json);
                 if (lido == null) continue;
 
-                eventos.Add(new EventoMundo
-                {
-                    Seq = lido.Seq,
-                    Autor = lido.Autor,
-                    Tipo = (TipoEventoMundo)lido.Tipo,
-                    Payload = Convert.FromBase64String(lido.Payload),
-                    TimestampLogico = lido.TimestampLogico,
-                });
+                eventos.Add(new Anotado(
+                    new EventoMundo
+                    {
+                        Seq = lido.Seq,
+                        Autor = lido.Autor,
+                        Tipo = (TipoEventoMundo)lido.Tipo,
+                        Payload = Convert.FromBase64String(lido.Payload),
+                        TimestampLogico = lido.TimestampLogico,
+                    },
+                    // Linha sem planeta é anterior à segregação: pertence ao
+                    // planeta que o log tinha adotado na época.
+                    string.IsNullOrEmpty(lido.Planeta) ? planetaDeRegistro : lido.Planeta));
                 ultimoSeq = Math.Max(ultimoSeq, lido.Seq);
             }
             catch (Exception e) when (e is JsonException or FormatException)
@@ -178,8 +184,9 @@ public sealed class LogDeEventos
             }
         }
 
+        var planetas = eventos.Select(e => e.Planeta).Distinct().ToArray();
         Console.WriteLine(
-            $"Log de mundo: {eventos.Count} eventos carregados, último seq={ultimoSeq}" +
-            (planeta.Length > 0 ? $", planeta {planeta}" : ""));
+            $"Log de mundo: {eventos.Count} eventos carregados, último seq={ultimoSeq}, " +
+            $"{planetas.Length} planeta(s): {string.Join(", ", planetas.Select(Curto))}");
     }
 }

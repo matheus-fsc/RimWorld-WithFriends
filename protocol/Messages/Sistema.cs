@@ -10,10 +10,17 @@ public enum CodigoErro
     FalhaAoProcessar = 2,
 
     /// <summary>
-    /// O planeta deste cliente não é o do mundo compartilhado. O login
-    /// continua válido; só os eventos de mundo ficam de fora (§2.1).
+    /// Este cliente é o único no planeta dele, e há gente online em outro.
+    ///
+    /// <para>Não é recusa: o planeta pertence ao fato, e cada cliente recebe os
+    /// eventos do seu (ADR 0021). É aviso — quem está sozinho no próprio
+    /// planeta não vê ninguém no mapa-mundo, e sem isto pareceria defeito. A
+    /// explicação traz a descrição do planeta dos outros, que é o que permite
+    /// regerar e encontrar.</para>
+    ///
+    /// <para>Mandado uma vez por planeta, não a cada sincronização.</para>
     /// </summary>
-    PlanetaDivergente = 3,
+    SozinhoNoPlaneta = 3,
 
     /// <summary>
     /// O comando é decisão da colônia, e quem propôs está visitando. Ver
