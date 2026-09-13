@@ -92,10 +92,42 @@ public static class RastreioDeCaminho
         naInterface = 0;
     }
 
-    public static void Anotar(Pawn? pawn, string o_que)
+    public static void Anotar(Pawn? pawn, string o_que, bool comPilha = false)
     {
         if (pawn == null) return;
-        Log.Message($"[WithFriends/caminho] passo {Passo} #{pawn.thingIDNumber} {pawn.LabelShort}: {o_que}");
+
+        Log.Message(
+            $"[WithFriends/caminho] passo {Passo} #{pawn.thingIDNumber} {pawn.LabelShort}: {o_que}" +
+            (comPilha ? "\n      " + QuemChamou() : ""));
+    }
+
+    /// <summary>
+    /// Quem chamou, em uma linha.
+    ///
+    /// <para><b>Por que só aqui.</b> Capturar pilha é caro, e o rastreio de RNG
+    /// já paga esse preço milhares de vezes por tick com um hash. Aqui é
+    /// diferente: encerrar job acontece poucas vezes por tick, e a pergunta que
+    /// restou — "quem encerrou este <c>Goto</c> com <c>Succeeded</c> enquanto
+    /// ele ainda andava?" — só tem uma resposta possível, que é o nome do
+    /// chamador.</para>
+    /// </summary>
+    static string QuemChamou()
+    {
+        var pilha = new System.Diagnostics.StackTrace(2, false);
+        var partes = new System.Collections.Generic.List<string>(8);
+
+        for (int i = 0; i < pilha.FrameCount && partes.Count < 8; i++)
+        {
+            try
+            {
+                var metodo = pilha.GetFrame(i)?.GetMethod();
+                if (metodo == null) continue;
+                partes.Add($"{metodo.DeclaringType?.Name ?? "?"}.{metodo.Name}");
+            }
+            catch { partes.Add("?"); }
+        }
+
+        return string.Join(" < ", partes);
     }
 }
 
@@ -234,7 +266,9 @@ public static class JobEncerrado
         if (CampoDoPawn?.GetValue(__instance) is not Pawn pawn) return;
 
         RastreioDeCaminho.Anotar(
-            pawn, $"job {__instance.curJob?.def?.defName ?? "-"} encerrado: {condition}");
+            pawn,
+            $"job {__instance.curJob?.def?.defName ?? "-"} encerrado: {condition}",
+            comPilha: true);
     }
 }
 
