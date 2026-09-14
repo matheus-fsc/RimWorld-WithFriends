@@ -46,6 +46,26 @@ public static class ModoEmulacao
         GenCommandLine.TryGetCommandLineArg("emulacaosegundos", out string s) &&
         float.TryParse(s, out float v) ? v : 120f;
 
+    /// <summary>
+    /// Em que velocidade a emulação corre. Padrão <c>Fast</c>.
+    ///
+    /// <para>Existe porque há coisa que só acontece <b>depois de muito tempo de
+    /// jogo</b>. A troca de clima é a primeira: <c>curWeatherDuration</c> é
+    /// sorteado na faixa do def e chega fácil a dezenas de milhares de ticks,
+    /// e a janela que interessa — a transição, com
+    /// <c>curWeatherAge &lt; 4000</c> — só existe logo depois dela.</para>
+    ///
+    /// <para><c>Ultrafast</c> é a velocidade que o jogo só oferece em modo de
+    /// desenvolvedor. Aqui ela não é trapaça: o relógio da sessão é negociado
+    /// (§3) e a barreira continua mandando, então os dois lados andam juntos
+    /// como em qualquer outra velocidade — só andam mais.</para>
+    /// </summary>
+    static TimeSpeed Velocidade =>
+        GenCommandLine.TryGetCommandLineArg("emulacaovelocidade", out string v)
+        && System.Enum.TryParse<TimeSpeed>(v, ignoreCase: true, out var escolhida)
+            ? escolhida
+            : TimeSpeed.Fast;
+
     static float acabaEm = -1f;
     static bool comecou;
 
@@ -84,7 +104,8 @@ public static class ModoEmulacao
         if (acabaEm < 0f)
         {
             acabaEm = Time.realtimeSinceStartup + Duracao;
-            Log.Message($"[WithFriends/emulação] visita de pé — rodando por {Duracao:F0}s.");
+            Log.Message(
+                $"[WithFriends/emulação] visita de pé — rodando por {Duracao:F0}s em {Velocidade}.");
 
             // O roteiro só começa a contar agora: os segundos dele são de
             // visita, não de processo. Entre subir o jogo e a barreira andar
@@ -99,7 +120,7 @@ public static class ModoEmulacao
         // isto, a primeira divergência congelaria o resto do experimento.
         if (Find.TickManager is { Paused: true })
             ControleDeVelocidade.ComoSistema(
-                () => Find.TickManager.CurTimeSpeed = TimeSpeed.Fast);
+                () => Find.TickManager.CurTimeSpeed = Velocidade);
 
         if (Time.realtimeSinceStartup < acabaEm) return;
 

@@ -37,6 +37,7 @@ wf — linha de comando do With Friends
       --visivel                    com janela, para acompanhar em tempo real
       --sangue                     rastreia a decisão de largar sangue
       --caminho                    rastreia as decisões do pathfinding
+      --velocidade V               Normal|Fast|Superfast|Ultrafast (padrão Fast)
   wf comparar                      compara os dois diários mais novos
   wf auditar                       audita o assembly do jogo (alcance + MP)
   wf saves [p1|p2]                 lista os saves de cada instância
@@ -119,15 +120,18 @@ cmd_servidor() { [[ -n "${1:-}" ]] && PORTA="$1"; compilar_servidor
 cmd_jogos() { exec "$RAIZ/tools/dois-jogos.sh" "$@"; }
 
 cmd_emular() {
-    local visivel=0 sangue=0 caminho=0 roteiro="" args=() pegar_roteiro=0
+    local visivel=0 sangue=0 caminho=0 roteiro="" velocidade="" args=() pegar_roteiro=0 pegar_vel=0
     for a in "$@"; do
         if [[ $pegar_roteiro -eq 1 ]]; then roteiro="$a"; pegar_roteiro=0; continue; fi
+        if [[ $pegar_vel -eq 1 ]]; then velocidade="$a"; pegar_vel=0; continue; fi
         case "$a" in
             --visivel)   visivel=1 ;;
             --sangue)    sangue=1 ;;
             --caminho)   caminho=1 ;;
             --roteiro)   pegar_roteiro=1 ;;
             --roteiro=*) roteiro="${a#*=}" ;;
+            --velocidade)   pegar_vel=1 ;;
+            --velocidade=*) velocidade="${a#*=}" ;;
             *)           args+=("$a") ;;
         esac
     done
@@ -147,6 +151,7 @@ cmd_emular() {
     [[ -n "$roteiro" ]] && extra="-emulacaoroteiro=$roteiro"
     [[ $sangue -eq 1 ]] && extra="$extra -rastrearsangue"
     [[ $caminho -eq 1 ]] && extra="$extra -rastrearcaminho"
+    [[ -n "$velocidade" ]] && extra="$extra -emulacaovelocidade=$velocidade"
     if [[ $visivel -eq 1 ]]; then
         semtela=""
         # Unity abre em tela cheia por padrão, e duas instâncias em tela cheia
@@ -157,7 +162,7 @@ cmd_emular() {
         extra="$extra -emulacaovisivel -screen-fullscreen 0 -screen-width $((largura / 2)) -screen-height $((altura - 80))"
     fi
 
-    msg "== anfitrião \"$host\" × árbitro \"$arb\", ${seg}s$([[ -n "$roteiro" ]] && echo ", roteiro $roteiro")$([[ $visivel -eq 1 ]] && echo ' (visível)')"
+    msg "== anfitrião \"$host\" × árbitro \"$arb\", ${seg}s$([[ -n "$roteiro" ]] && echo ", roteiro $roteiro")$([[ -n "$velocidade" ]] && echo ", $velocidade")$([[ $visivel -eq 1 ]] && echo ' (visível)')"
     ( cd "$JOGO" && nohup ./RimWorldLinux $semtela $extra \
         -emulacao -emulacaosave="$host" -arbitrosave="$arb" -emulacaosegundos="$seg" \
         -logFile "$DADOS_P1/Player.log" > /dev/null 2>&1 & )

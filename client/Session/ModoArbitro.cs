@@ -211,7 +211,11 @@ public static class ModoArbitro
             (visivel ? " -emulacaovisivel" : "") +
             // Rastreio que só um lado faz não compara com nada.
             (RastreioDeSangue.Ligado ? " -rastrearsangue" : "") +
-            (RastreioDeCaminho.Ligado ? " -rastrearcaminho" : "");
+            (RastreioDeCaminho.Ligado ? " -rastrearcaminho" : "") +
+            // A velocidade é negociada, mas o árbitro precisa saber dela para
+            // o caso de ele mesmo ter de despausar.
+            (GenCommandLine.TryGetCommandLineArg("emulacaovelocidade", out string vel)
+                ? $" -emulacaovelocidade={vel}" : "");
 
         try
         {
