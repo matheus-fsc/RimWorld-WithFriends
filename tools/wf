@@ -35,6 +35,7 @@ wf — linha de comando do With Friends
   wf rodar SAVE [ticks]            roda UMA colônia sem interface e relata
       --velocidade V               Normal|Fast|Superfast|Ultrafast
       --p2                         usa o save da pasta do jogador 2
+      --controle P                 abre a porta de controle em 127.0.0.1:P
   wf emular HOST ARB [segundos]    roda uma visita inteira sozinha e sai
       --roteiro raid|combate|mover  provoca assalto, briga ou ordens de ir
       --visivel                    com janela, para acompanhar em tempo real
@@ -43,6 +44,7 @@ wf — linha de comando do With Friends
       --velocidade V               Normal|Fast|Superfast|Ultrafast (padrão Fast)
   wf comparar                      compara os dois diários mais novos
   wf erros [--todos]               agrupa erros e avisos; destaca os de um lado só
+  wf controle [--porta P] [cmd]    dirige um jogo aberto com -controle=P
   wf auditar                       audita o assembly do jogo (alcance + MP)
   wf saves [p1|p2]                 lista os saves de cada instância
   wf diarios                       lista os diários mais novos de cada lado
@@ -129,12 +131,15 @@ cmd_jogos() { exec "$RAIZ/tools/dois-jogos.sh" "$@"; }
 # de ticks por segundo e reprodução de bug sem clicar. Nada aqui é de sessão —
 # ver client/Bancada/ModoAvulso.cs.
 cmd_rodar() {
-    local velocidade="" pasta="$DADOS_P1" args=() pegar_vel=0
+    local velocidade="" pasta="$DADOS_P1" controle="" args=() pegar_vel=0 pegar_ctl=0
     for a in "$@"; do
         if [[ $pegar_vel -eq 1 ]]; then velocidade="$a"; pegar_vel=0; continue; fi
+        if [[ $pegar_ctl -eq 1 ]]; then controle="$a"; pegar_ctl=0; continue; fi
         case "$a" in
             --velocidade)   pegar_vel=1 ;;
             --velocidade=*) velocidade="${a#*=}" ;;
+            --controle)     pegar_ctl=1 ;;
+            --controle=*)   controle="${a#*=}" ;;
             --p2)           pasta="$DADOS_P2" ;;
             *)              args+=("$a") ;;
         esac
@@ -148,6 +153,7 @@ cmd_rodar() {
 
     local extra=""
     [[ -n "$velocidade" ]] && extra="-rodarvelocidade=$velocidade"
+    [[ -n "$controle" ]] && extra="$extra -controle=$controle"
     [[ "$pasta" != "$DADOS_P1" ]] && extra="$extra -savedatafolder=$pasta"
 
     msg "== rodando \"$save\" por $ticks tick(s)$([[ -n "$velocidade" ]] && echo ", $velocidade")"
@@ -219,6 +225,8 @@ cmd_comparar() { exec python3 "$RAIZ/tools/comparar-diarios.py"; }
 
 cmd_erros() { exec python3 "$RAIZ/tools/erros.py" "$@"; }
 
+cmd_controle() { exec python3 "$RAIZ/tools/controle.py" "$@"; }
+
 cmd_auditar() {
     local dll="$RAIZ/referencia/jogo/steam-1.6.4871/Managed/Assembly-CSharp.dll"
     local mp="$RAIZ/referencia/repos/Multiplayer/Source"
@@ -265,6 +273,7 @@ case "${1:-}" in
     emular)   shift; cmd_emular "$@" ;;
     comparar) shift; cmd_comparar "$@" ;;
     erros)    shift; cmd_erros "$@" ;;
+    controle) shift; cmd_controle "$@" ;;
     auditar)  shift; cmd_auditar "$@" ;;
     saves)    shift; cmd_saves "$@" ;;
     diarios)  shift; cmd_diarios "$@" ;;

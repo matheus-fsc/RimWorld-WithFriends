@@ -64,7 +64,8 @@ public static class ModoArbitro
     /// <para>Os remendos de "não desenhar" valem para as duas: a emulação também
     /// sobe com <c>-nographics</c>, e o jogo assume textura nos mesmos lugares.</para>
     /// </summary>
-    public static bool SemNinguemNaFrente => Ativo || ModoEmulacao.Ativo;
+    public static bool SemNinguemNaFrente =>
+        Ativo || ModoEmulacao.Ativo || Bancada.ModoAvulso.Ativo;
 
     /// <summary>
     /// Prepara a instância. Chamado na subida do mod.

@@ -82,6 +82,15 @@ public class SincronizacaoComponent : GameComponent
 
     public override void GameComponentUpdate()
     {
+        // A bancada não é sessão: ela roda uma colônia sozinha, sem
+        // coordenador e sem visita. Vem primeiro e sai cedo, para não depender
+        // de nada que a sessão monta.
+        Bancada.ModoAvulso.Acompanhar();
+
+        // O socket lê numa thread de fundo; quem executa é o quadro, porque as
+        // APIs do jogo não são seguras fora da thread principal.
+        Bancada.PortaDeControle.Atender();
+
         var cliente = WithFriendsMod.Cliente;
 
         TentarConectarSozinho(cliente);

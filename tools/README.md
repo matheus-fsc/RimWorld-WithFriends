@@ -170,3 +170,114 @@ Então:
 
 Para as segundas, os rastreios (`--caminho`, `--sangue`) agora também podem ser
 ligados em `wf jogos`, que é onde há interface de verdade dos dois lados.
+
+## A bancada: rodar RimWorld sem interface
+
+```
+wf rodar MinhaColonia 20000
+wf rodar MinhaColonia 20000 --velocidade Ultrafast
+```
+
+Uma colônia, sem coordenador, sem visita, sem lockstep — o RimWorld normal
+rodando sozinho por N **ticks** e relatando no fim:
+
+```
+   [WithFriends/bancada] colônia de pé no tick 22423 — rodando 20000 tick(s) em Superfast.
+   [WithFriends/bancada] fim: 20000 tick(s) em 148.3s = 134.9 tick(s)/s (2.25x do tempo real)
+   [WithFriends/bancada] 0 erro(s) e 3 aviso(s) durante a corrida
+   [WithFriends/bancada] retrato: 6472 things, 17 pawns, …
+```
+
+**Ticks, não segundos**: é a unidade que se repete entre máquinas e entre
+execuções, e a que faz duas corridas serem comparáveis.
+
+### Por que isto não é sobre multijogador
+
+Nada aqui liga coordenador, sessão ou barreira, e o gerador de números **não**
+é isolado: todos os remendos de determinismo perguntam antes se há visita em
+andamento, e aqui não há. É o jogo de sempre.
+
+O que a bancada reaproveita é o que custou caro descobrir para a emulação
+funcionar, e que não tem nada de multijogador:
+
+| peça | o que resolve |
+|---|---|
+| lista de cancelamento sem placa de vídeo | `WaterInfo.SetTextures`, `PortraitsCache.Get`, `SubcameraDriver.UpdatePositions`, `Map.MapUpdate`, `Section.RegenerateAllLayers`, `SectionLayer.DrawLayer`, `GUIStyle.CalcSize`, `FloatMenuOption.SetSizeMode`, `Prefs.Save` — cada uma é um NRE que só aparece sem GPU |
+| `Root_Entry.Update` para carregar o save | sem GUI o menu principal **nunca** roda; a instância sobe e fica parada para sempre, compilando perfeitamente |
+| `WindowsForcePause → false` | uma carta de ameaça pausa o relógio **por existir**, e escrever `CurTimeSpeed` não desfaz |
+| contagem de erro e aviso | "rodou 20 mil ticks, 0 erros" é a resposta que um teste de regressão precisa dar |
+
+Para que serve, fora daqui:
+
+- **regressão**: a colônia de teste ainda roda N ticks sem erro depois da sua mudança?
+- **medição**: quantos ticks por segundo, e quanto o mod piora isso
+- **reprodução**: o mesmo save, o mesmo número de ticks, sem clicar
+
+### O que ela não faz
+
+Não gera mundo nem colônia — precisa de um save pronto. Gerar exigiria dirigir
+a tela de criação, que é exatamente o que uma instância sem interface não tem.
+
+E não dirige a interface: nenhum clique, nenhum menu. A classe de bug que nasce
+de "a interface perguntou à simulação" continua fora do alcance dela, pelo mesmo
+motivo que está fora do alcance do `wf emular` (ver acima).
+
+### Se algum dia virar coisa de outros
+
+O código mora em `client/Bancada/`, fora de `Session/`, de propósito: é a
+costura por onde a bancada se separa do mod. O que atravessaria junto é a lista
+de cancelamento e os dois ganchos de subida — nada mais.
+
+Uma ressalva honesta: a lista de cancelamento é de **1.6.4871**. Numa versão
+nova ela muda, e descobrir o que mudou custa uma corrida que estoura. É o preço
+recorrente de manter uma coisa dessas publicada.
+
+## Dirigir o jogo de fora
+
+O jogo sobe com a porta aberta; qualquer coisa que fale socket manda comandos.
+
+```
+wf rodar presetfull 2000000 --controle 25600     # bancada com porta
+wf jogos --servidor --controle 25600             # ou as duas instâncias (P e P+1)
+
+wf controle estado
+wf controle pawns Kasumi
+printf 'alistar 1048 1\nir 1048 100,120\n' | wf controle
+```
+
+Vocabulário: `estado`, `pawns [texto]`, `alistar ID 0|1`, `ir ID x,z`,
+`incidente DEF [pontos]`, `velocidade NOME`, `despejar`, `sair`.
+
+### A regra que faz isto valer alguma coisa
+
+Cada comando entra pelo **mesmo caminho de um clique** — `drafter.Drafted`,
+`TryTakeOrderedJob`, `TipoDeComando.Incidente`. Nenhum atalho para dentro da
+simulação. Se o caminho do comando estiver quebrado, o teste quebra junto, que é
+o que se quer de um teste. Dentro de uma visita, `incidente` vira comando de
+sessão e obedece a autoridade da §4; fora dela, dispara local.
+
+### Como roteiro
+
+```python
+from controle import Controle
+
+with Controle(25600) as c:
+    for p in c.pawns(alistados=False):
+        c.cmd(f"alistar {p['id']} 1")
+    c.cmd("incidente RaidEnemy 500")
+    print(c.estado()["tick"])
+```
+
+Cenário passa a ser texto: mudar um teste deixa de custar `dotnet build` e duas
+instâncias reabertas.
+
+### Detalhes que custaram
+
+- O socket lê numa thread de fundo, mas **quem executa é o quadro**: as APIs do
+  RimWorld não são seguras fora da thread principal. O cliente espera a resposta
+  de propósito — quem dirige precisa saber que o comando aconteceu antes de
+  mandar o próximo, senão o roteiro vira corrida.
+- Só `127.0.0.1`, e só com `-controle=PORTA`. É ferramenta de bancada.
+- Na bancada, mudar o relógio direto não bastava: ela reescreve a velocidade a
+  cada quadro para impedir que um incidente pause a corrida, e atropelava o
+  comando. Quem manda pela porta muda o **alvo** dela.

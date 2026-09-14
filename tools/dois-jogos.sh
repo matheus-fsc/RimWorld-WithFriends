@@ -23,6 +23,7 @@
 #   tools/dois-jogos.sh --so-segundo    abre só a segunda instância
 #   tools/dois-jogos.sh --matar         só fecha o que estiver aberto
 #   tools/dois-jogos.sh --arbitro NOME  a segunda instância vira árbitro
+#   tools/dois-jogos.sh --controle P   abre a porta de controle (P e P+1)
 #   tools/dois-jogos.sh --caminho      liga o rastreio de pathfinding nos dois
 #   tools/dois-jogos.sh --sangue       liga o rastreio de sangue nos dois
 #
@@ -53,6 +54,7 @@ SO_SEGUNDO=0
 SO_MATAR=0
 SAVE_ARBITRO=""
 RASTREIOS=""
+CONTROLE=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -69,6 +71,8 @@ while [[ $# -gt 0 ]]; do
             SAVE_ARBITRO="$1"
             ;;
         --arbitro=*)  SAVE_ARBITRO="${1#*=}" ;;
+        --controle)   shift; [[ $# -gt 0 ]] || { echo "--controle precisa da porta" >&2; exit 2; }; CONTROLE="$1" ;;
+        --controle=*) CONTROLE="${1#*=}" ;;
         --caminho)    RASTREIOS="$RASTREIOS -rastrearcaminho" ;;
         --sangue)     RASTREIOS="$RASTREIOS -rastrearsangue" ;;
         # O cabeçalho inteiro é a ajuda: imprime até a primeira linha que não
@@ -125,7 +129,8 @@ cd "$JOGO"
 
 if [[ $SO_SEGUNDO -eq 0 ]]; then
     echo "== abrindo jogador 1"
-    nohup ./RimWorldLinux $RASTREIOS -logFile "$LOG_P1" > /dev/null 2>&1 &
+    nohup ./RimWorldLinux $RASTREIOS ${CONTROLE:+-controle=$CONTROLE} \
+        -logFile "$LOG_P1" > /dev/null 2>&1 &
     sleep 3
 fi
 
@@ -133,12 +138,13 @@ if [[ -n "$SAVE_ARBITRO" ]]; then
     echo "== abrindo o ÁRBITRO  (save: $SAVE_ARBITRO, pasta: $DADOS_P2)"
     nohup ./RimWorldLinux \
         -batchmode -nographics \
-        -arbitro -arbitrosave="$SAVE_ARBITRO" $RASTREIOS \
+        -arbitro -arbitrosave="$SAVE_ARBITRO" $RASTREIOS ${CONTROLE:+-controle=$((CONTROLE + 1))} \
         -savedatafolder="$DADOS_P2" -logFile "$LOG_P2" > /dev/null 2>&1 &
     SEGUNDO="árbitro"
 else
     echo "== abrindo jogador 2  (pasta de dados: $DADOS_P2)"
-    nohup ./RimWorldLinux $RASTREIOS -savedatafolder="$DADOS_P2" -logFile "$LOG_P2" > /dev/null 2>&1 &
+    nohup ./RimWorldLinux $RASTREIOS ${CONTROLE:+-controle=$((CONTROLE + 1))} \
+        -savedatafolder="$DADOS_P2" -logFile "$LOG_P2" > /dev/null 2>&1 &
     SEGUNDO="jogador 2"
 fi
 

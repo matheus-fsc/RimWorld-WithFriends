@@ -45,6 +45,18 @@ public static class DiarioDaInstancia
 
     public static string? Caminho { get; private set; }
 
+    /// <summary>
+    /// Quantos erros e avisos passaram por aqui — de qualquer origem, não só
+    /// do mod.
+    ///
+    /// <para>É o resumo que uma corrida de bancada precisa dar no fim: "rodou
+    /// 20 mil ticks, 0 erros" é a resposta útil, e contar aqui é de graça
+    /// porque toda linha já passa por este funil.</para>
+    /// </summary>
+    public static long Erros { get; private set; }
+
+    public static long Avisos { get; private set; }
+
     public static void Abrir(string playerId)
     {
         lock (Trava)
@@ -140,6 +152,9 @@ public static class DiarioDaInstancia
     static void Escrever(string nivel, string texto)
     {
         if (texto == null) return;
+
+        if (nivel == "ERRO") Erros++;
+        else if (nivel == "AVISO") Avisos++;
 
         if (nivel == "msg")
         {

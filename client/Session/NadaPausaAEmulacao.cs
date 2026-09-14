@@ -38,7 +38,7 @@ public static class JanelaNaoPausaAEmulacao
     public static void Depois(ref bool __result)
     {
         if (!__result) return;
-        if (!ModoEmulacao.Ativo && !ModoArbitro.Ativo) return;
+        if (!ModoEmulacao.Ativo && !ModoArbitro.Ativo && !Bancada.ModoAvulso.Ativo) return;
 
         __result = false;
         GuardasDeDeterminismo.Disparou("janela não pausa a emulação");

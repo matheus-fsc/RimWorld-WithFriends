@@ -44,6 +44,10 @@ public class WithFriendsMod : Mod
         // `-arbitro` não foi passado.
         Session.ModoArbitro.Preparar();
 
+        // A porta de controle sobe com o mod, não com a partida: quem dirige de
+        // fora precisa poder conversar antes de haver colônia aberta.
+        Bancada.PortaDeControle.Abrir();
+
         // Efeitos visuais e sonoros não podem mover o estado compartilhado.
         // São dezenas de métodos, então o remendo é em lote (ADR 0012).
         Session.EfeitosNaoDeterministicos.Instalar(Harmony);
