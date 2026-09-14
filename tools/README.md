@@ -248,6 +248,42 @@ printf 'alistar 1048 1\nir 1048 100,120\n' | wf controle
 Vocabulário: `estado`, `pawns [texto]`, `alistar ID 0|1`, `ir ID x,z`,
 `incidente DEF [pontos]`, `velocidade NOME`, `despejar`, `sair`.
 
+Gestos de **interface**: `selecionar ID…`, `menu x,z`, `irarrastando x,z`,
+`olhar x,z`.
+
+### O limite que a interface parecia impor — e por que ela não impõe
+
+Está dito acima que a emulação headless não alcança a classe de bug que nasce da
+interface. Isso continua verdade para **evento de mouse**: em
+`-batchmode -nographics` o `OnGUI` não roda, e clique sintético não é consumido
+por ninguém.
+
+Mas o que causa divergência nunca foi o mouse — é o **código de interface
+rodando e mexendo em estado compartilhado**. Todas as causas achadas até hoje
+foram consulta ou escrita feita por ele: a ordem dos vizinhos, as células de
+zona, o memo de alcançabilidade, o `EndCurrentJob` do "ir aqui". Nenhuma
+precisou de um pixel desenhado.
+
+Então os gestos chamam os **pontos de entrada** que o clique chamaria —
+`FloatMenuMakerMap.GetOptions`, `Selector.Select`,
+`MultiPawnGotoController.StartInteraction/AddPawn/FinalizeInteraction`,
+`CameraDriver.JumpToCurrentMapLoc`. Medido: funcionam numa instância sem tela.
+
+O bug do "ir aqui" reproduzido sem ninguém clicando:
+
+```python
+c.cmd("selecionar 1048")
+c.cmd("ir 1048 140,150")          # começa um Goto
+c.cmd("velocidade Paused")        # congela a posição
+p = c.pawns("Kasumi")[0]
+c.cmd(f"irarrastando {p['x']},{p['z']}")   # arrasta em cima dele mesmo
+# antes:  job=Goto         depois:  job=Wait_Combat
+```
+
+A pausa não é detalhe: sem ela o pawn anda entre a leitura e o arrasto, a
+condição `pawn.Position == gotoLoc` deixa de valer, e o gesto não toca o
+caminho que interessa.
+
 ### A regra que faz isto valer alguma coisa
 
 Cada comando entra pelo **mesmo caminho de um clique** — `drafter.Drafted`,

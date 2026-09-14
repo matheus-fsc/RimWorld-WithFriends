@@ -167,7 +167,8 @@ public static class PortaDeControle
         {
             case "ajuda":
                 return "ok estado | pawns [texto] | alistar ID 0|1 | ir ID x,z | " +
-                       "incidente DEF [pontos] | velocidade NOME | despejar | sair";
+                       "incidente DEF [pontos] | velocidade NOME | despejar | sair " +
+                       "|| interface: selecionar ID… | menu x,z | irarrastando x,z | olhar x,z";
 
             case "estado":
                 return Estado();
@@ -186,6 +187,18 @@ public static class PortaDeControle
 
             case "velocidade":
                 return Velocidade(partes);
+
+            case "selecionar":
+                return Selecionar(partes);
+
+            case "menu":
+                return Menu(partes);
+
+            case "irarrastando":
+                return IrArrastando(partes);
+
+            case "olhar":
+                return Olhar(partes);
 
             case "despejar":
                 RastreioDePawns.Despejar();
@@ -326,6 +339,121 @@ public static class PortaDeControle
 
         Find.TickManager.CurTimeSpeed = v;
         return $"ok velocidade {v}";
+    }
+
+    // ------------------------------------------------------------------
+    // Gestos de interface
+    //
+    // **Por que chamar direto em vez de mover o mouse.** Numa instância
+    // `-batchmode -nographics` o `OnGUI` não roda — foi por isso que carregar um
+    // save precisou sair de `MainMenuDrawer.MainMenuOnGUI` para
+    // `Root_Entry.Update`. Sem laço de interface, evento de mouse sintético não
+    // é consumido por ninguém.
+    //
+    // E o que causa divergência não é o mouse: é o **código de interface
+    // rodando**. Todas as causas achadas até hoje foram consulta ou escrita
+    // feita por ele — a ordem dos vizinhos, as células de zona, o memo de
+    // alcançabilidade, o `EndCurrentJob` do "ir aqui". Nenhuma precisou de um
+    // pixel desenhado.
+    //
+    // Então a bancada chama os pontos de entrada que o clique chamaria. Não é o
+    // mouse; é tudo o que vem depois dele.
+    // ------------------------------------------------------------------
+
+    static string Selecionar(string[] partes)
+    {
+        var seletor = Find.Selector;
+        if (seletor == null) return "erro sem seletor (instância sem interface montada)";
+
+        seletor.ClearSelection();
+
+        int quantos = 0;
+        for (int i = 1; i < partes.Length; i++)
+        {
+            if (!int.TryParse(partes[i], out int id)) continue;
+            var pawn = Achar(id);
+            if (pawn == null) continue;
+            seletor.Select(pawn, playSound: false, forceDesignatorDeselect: false);
+            quantos++;
+        }
+
+        return $"ok {quantos} selecionado(s)";
+    }
+
+    /// <summary>
+    /// Monta o menu flutuante naquela célula — o clique com o botão direito.
+    ///
+    /// <para>É o gesto mais caro da interface e o mais suspeito: é aqui que
+    /// rodam os <c>FloatMenuOptionProvider_*</c>, e foi num tick destes que uma
+    /// partida contou <b>229 mil</b> consultas de alcançabilidade de um lado e
+    /// zero do outro.</para>
+    /// </summary>
+    static string Menu(string[] partes)
+    {
+        if (partes.Length < 2) return "erro uso: menu x,z";
+
+        var seletor = Find.Selector;
+        if (seletor == null) return "erro sem seletor (instância sem interface montada)";
+
+        var celula = LerCelula(partes[1]);
+        if (!celula.IsValid) return "erro célula inválida (use x,z)";
+
+        var pawns = seletor.SelectedPawns;
+        if (pawns.Count == 0) return "erro nenhum pawn selecionado (use 'selecionar ID…')";
+
+        var opcoes = FloatMenuMakerMap.GetOptions(pawns, celula.ToVector3Shifted(), out _);
+
+        return $"ok {opcoes.Count} opção(ões): " +
+               string.Join(" | ", opcoes.Take(8).Select(o => o.Label.Replace(' ', '_')));
+    }
+
+    /// <summary>
+    /// O "ir aqui" arrastado, que é o caminho exato de
+    /// <c>MultiPawnGotoController</c> — e foi ele que encerrava o <c>Goto</c> na
+    /// máquina de quem clicava, sem passar por comando nenhum.
+    /// </summary>
+    static string IrArrastando(string[] partes)
+    {
+        if (partes.Length < 2) return "erro uso: irarrastando x,z";
+
+        var seletor = Find.Selector;
+        if (seletor == null) return "erro sem seletor (instância sem interface montada)";
+
+        var celula = LerCelula(partes[1]);
+        if (!celula.IsValid) return "erro célula inválida (use x,z)";
+
+        var pawns = seletor.SelectedPawns.ToList();
+        if (pawns.Count == 0) return "erro nenhum pawn selecionado";
+
+        seletor.gotoController.StartInteraction(celula);
+        foreach (var pawn in pawns) seletor.gotoController.AddPawn(pawn);
+        seletor.gotoController.FinalizeInteraction();
+
+        return $"ok {pawns.Count} pawn(s) mandados para {celula.x},{celula.z} pelo arrasto";
+    }
+
+    /// <summary>
+    /// Move a câmera. Exercita tudo o que lê para onde o jogador está olhando —
+    /// motes, ritmo de atualização, desenho de pawn.
+    /// </summary>
+    static string Olhar(string[] partes)
+    {
+        if (partes.Length < 2) return "erro uso: olhar x,z";
+
+        var celula = LerCelula(partes[1]);
+        if (!celula.IsValid) return "erro célula inválida (use x,z)";
+        if (Find.CameraDriver == null) return "erro sem câmera";
+
+        Find.CameraDriver.JumpToCurrentMapLoc(celula);
+        return $"ok olhando para {celula.x},{celula.z}";
+    }
+
+    static IntVec3 LerCelula(string texto)
+    {
+        var partes = texto.Split(',');
+        return partes.Length >= 2 && int.TryParse(partes[0], out int x) && int.TryParse(partes[1], out int z)
+            ? new IntVec3(x, 0, z)
+            : IntVec3.Invalid;
     }
 
     static Pawn? Achar(int id) =>
