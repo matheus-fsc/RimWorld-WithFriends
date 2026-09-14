@@ -86,7 +86,7 @@ public static class RastreioDePawns
 
     static void AmostrarDeVerdade(long tickDeSessao, Map mapa)
     {
-        var linhas = new List<string>();
+        var linhas = new List<string> { LinhaDoMapa(mapa) };
 
         // Ordem por id: a ordem das listas do jogo não é contrato.
         //
@@ -240,6 +240,48 @@ public static class RastreioDePawns
             $"origem {origem.x,7:F2},{origem.z,7:F2}  " +
             $"alvo {(alvo.IsValid ? $"{alvo.Cell.x},{alvo.Cell.z}" : "-"),-9} " +
             $"lancador {projetil.Launcher?.thingIDNumber.ToString() ?? "-"}";
+    }
+
+    /// <summary>
+    /// O estado global do mapa que entra no custo de andar de **todo mundo**.
+    ///
+    /// <para><b>Por que esta linha existe.</b> Uma divergência apareceu como
+    /// dezenas de invasores com o custo de movimento diferente na terceira
+    /// casa decimal, todos no mesmo tick:</para>
+    ///
+    /// <code>
+    /// A: Huber  custo 21.050/21.080      B: Huber  custo 21.051/21.082
+    /// A: Legend custo 15.129/15.393      B: Legend custo 15.130/15.394
+    /// </code>
+    ///
+    /// <para>Diferença pequena, relativa, e igual para todos — assinatura de um
+    /// <b>multiplicador global</b>, não de decisão. E há um só no caminho:</para>
+    ///
+    /// <code>
+    /// // Pawn.TicksPerMove, para todo pawn sem teto sobre a cabeça
+    /// num3 /= map.weatherManager.CurMoveSpeedMultiplier;
+    ///
+    /// CurMoveSpeedMultiplier => Lerp(lastWeather.…, curWeather.…, TransitionLerpFactor);
+    /// TransitionLerpFactor   => curWeatherAge / 4000f;   // int, ++ a cada tick
+    /// </code>
+    ///
+    /// <para>Um tick de diferença em <c>curWeatherAge</c> move o multiplicador
+    /// em 1/4000 — a ordem exata do que foi medido. E nada disso sorteia, então
+    /// a digital (que é estado do RNG) só percebe quando vaza para o
+    /// movimento: nesta corrida, 9.700 passos depois.</para>
+    ///
+    /// <para>O multiplicador vai em precisão total pelo mesmo motivo da taxa de
+    /// sangramento: quatro casas diziam "idêntico" enquanto a decisão saía
+    /// diferente.</para>
+    /// </summary>
+    static string LinhaDoMapa(Map mapa)
+    {
+        var clima = mapa.weatherManager;
+
+        return
+            $"    ~mapa   clima idade {clima?.curWeatherAge ?? -1,7} " +
+            $"mult {(clima?.CurMoveSpeedMultiplier ?? 0f).ToString("R", System.Globalization.CultureInfo.InvariantCulture),-12} " +
+            $"precisao {(clima?.CurWeatherAccuracyMultiplier ?? 0f).ToString("R", System.Globalization.CultureInfo.InvariantCulture)}";
     }
 
     static string Linha(Pawn pawn)
