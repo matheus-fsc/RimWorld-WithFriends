@@ -32,6 +32,9 @@ wf — linha de comando do With Friends
   wf servidor [porta]              sobe o coordenador em primeiro plano
   wf jogos [--arbitro SAVE]        abre duas instâncias para jogar/testar à mão
       --caminho | --sangue         liga os rastreios nos dois lados
+  wf rodar SAVE [ticks]            roda UMA colônia sem interface e relata
+      --velocidade V               Normal|Fast|Superfast|Ultrafast
+      --p2                         usa o save da pasta do jogador 2
   wf emular HOST ARB [segundos]    roda uma visita inteira sozinha e sai
       --roteiro raid|combate|mover  provoca assalto, briga ou ordens de ir
       --visivel                    com janela, para acompanhar em tempo real
@@ -39,6 +42,7 @@ wf — linha de comando do With Friends
       --caminho                    rastreia as decisões do pathfinding
       --velocidade V               Normal|Fast|Superfast|Ultrafast (padrão Fast)
   wf comparar                      compara os dois diários mais novos
+  wf erros [--todos]               agrupa erros e avisos; destaca os de um lado só
   wf auditar                       audita o assembly do jogo (alcance + MP)
   wf saves [p1|p2]                 lista os saves de cada instância
   wf diarios                       lista os diários mais novos de cada lado
@@ -119,6 +123,44 @@ cmd_servidor() { [[ -n "${1:-}" ]] && PORTA="$1"; compilar_servidor
 
 cmd_jogos() { exec "$RAIZ/tools/dois-jogos.sh" "$@"; }
 
+# Uma colônia, sem coordenador, sem visita: o RimWorld normal rodando sozinho.
+#
+# Serve para teste de regressão de mod ("roda 20 mil ticks sem erro?"), medição
+# de ticks por segundo e reprodução de bug sem clicar. Nada aqui é de sessão —
+# ver client/Bancada/ModoAvulso.cs.
+cmd_rodar() {
+    local velocidade="" pasta="$DADOS_P1" args=() pegar_vel=0
+    for a in "$@"; do
+        if [[ $pegar_vel -eq 1 ]]; then velocidade="$a"; pegar_vel=0; continue; fi
+        case "$a" in
+            --velocidade)   pegar_vel=1 ;;
+            --velocidade=*) velocidade="${a#*=}" ;;
+            --p2)           pasta="$DADOS_P2" ;;
+            *)              args+=("$a") ;;
+        esac
+    done
+
+    local save="${args[0]:-}" ticks="${args[1]:-10000}"
+    [[ -n "$save" ]] || { erro "uso: wf rodar SAVE [ticks] [--velocidade V] [--p2]"; return 2; }
+    [[ -f "$pasta/Saves/$save.rws" ]] || { erro "save não encontrado: $pasta/Saves/$save.rws"; return 1; }
+
+    msg "== compilando"; compilar_cliente
+
+    local extra=""
+    [[ -n "$velocidade" ]] && extra="-rodarvelocidade=$velocidade"
+    [[ "$pasta" != "$DADOS_P1" ]] && extra="$extra -savedatafolder=$pasta"
+
+    msg "== rodando \"$save\" por $ticks tick(s)$([[ -n "$velocidade" ]] && echo ", $velocidade")"
+
+    # Primeiro plano de propósito: é uma medição, e quem chamou quer o número.
+    ( cd "$JOGO" && ./RimWorldLinux -batchmode -nographics \
+        -rodar -rodarsave="$save" -rodarticks="$ticks" $extra \
+        -logFile "$pasta/Player.log" > /dev/null 2>&1 ) || true
+
+    msg
+    grep -a "WithFriends/bancada" "$pasta/Player.log" | sed 's/^/   /' || msg "   (sem relatório — veja $pasta/Player.log)"
+}
+
 cmd_emular() {
     local visivel=0 sangue=0 caminho=0 roteiro="" velocidade="" args=() pegar_roteiro=0 pegar_vel=0
     for a in "$@"; do
@@ -175,6 +217,8 @@ cmd_emular() {
 
 cmd_comparar() { exec python3 "$RAIZ/tools/comparar-diarios.py"; }
 
+cmd_erros() { exec python3 "$RAIZ/tools/erros.py" "$@"; }
+
 cmd_auditar() {
     local dll="$RAIZ/referencia/jogo/steam-1.6.4871/Managed/Assembly-CSharp.dll"
     local mp="$RAIZ/referencia/repos/Multiplayer/Source"
@@ -217,8 +261,10 @@ cmd_status() {
 case "${1:-}" in
     servidor) shift; cmd_servidor "$@" ;;
     jogos)    shift; cmd_jogos "$@" ;;
+    rodar)    shift; cmd_rodar "$@" ;;
     emular)   shift; cmd_emular "$@" ;;
     comparar) shift; cmd_comparar "$@" ;;
+    erros)    shift; cmd_erros "$@" ;;
     auditar)  shift; cmd_auditar "$@" ;;
     saves)    shift; cmd_saves "$@" ;;
     diarios)  shift; cmd_diarios "$@" ;;
