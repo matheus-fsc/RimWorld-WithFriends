@@ -77,6 +77,23 @@ public static class DiarioDaInstancia
                 Antecipadas.Clear();
 
                 arquivo.WriteLine($"=== diário aberto: {DateTime.Now:O}, jogador {playerId} ===");
+
+                // **Descarga na abertura.**
+                //
+                // O resto sai em lote, e quem fecha o arquivo é `Fechar`. Um
+                // processo que morre antes disso — crash nativo, `kill`, o
+                // jogador fechando pela janela — leva o buffer junto.
+                //
+                // Custou uma rodada: a instância subiu, carregou o mod, foi
+                // fechada, e o diário ficou com ZERO bytes. Nem o cabeçalho,
+                // nem as linhas de subida (quantos remendos instalaram, quais
+                // falharam) — que são justamente as que dizem se valia a pena
+                // olhar o resto.
+                //
+                // Uma descarga aqui garante que um diário que existe tem, no
+                // mínimo, como ser identificado.
+                arquivo.Flush();
+
                 Log.Message($"[WithFriends] diário desta instância: {Caminho}");
             }
             catch (Exception e)
@@ -107,7 +124,18 @@ public static class DiarioDaInstancia
     /// <summary>Linhas comuns entre duas descargas ao disco.</summary>
     const int DescarregarACada = 512;
 
+    /// <summary>
+    /// Teto de tempo entre descargas.
+    ///
+    /// <para>O teto por linhas sozinho deixa um buraco: numa visita parada, ou
+    /// numa que loga pouco, as últimas linhas podem ficar horas no buffer — e
+    /// se o processo morre de repente, elas somem. O limite por tempo fecha
+    /// isso sem voltar ao <c>AutoFlush</c>, que era o problema original.</para>
+    /// </summary>
+    static readonly TimeSpan DescarregarNoMaximoACada = TimeSpan.FromSeconds(2);
+
     static int desdeADescarga;
+    static DateTime ultimaDescarga = DateTime.UtcNow;
 
     static void Escrever(string nivel, string texto)
     {
@@ -152,10 +180,14 @@ public static class DiarioDaInstancia
                 // O resto sai em lote. `DescarregarACada` é um meio-termo
                 // medido: linha demais no buffer arrisca perder contexto num
                 // crash, descarga demais era o problema original.
-                if (nivel != "msg" || ++desdeADescarga >= DescarregarACada)
+                var agora = DateTime.UtcNow;
+                if (nivel != "msg"
+                    || ++desdeADescarga >= DescarregarACada
+                    || agora - ultimaDescarga >= DescarregarNoMaximoACada)
                 {
                     arquivo.Flush();
                     desdeADescarga = 0;
+                    ultimaDescarga = agora;
                 }
             }
             catch { /* disco cheio, arquivo removido: o jogo não para por isso */ }
