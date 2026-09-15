@@ -15,7 +15,16 @@
 
 set -euo pipefail
 
-RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Resolve o próprio caminho antes de subir um nível: chamado por um symlink em
+# ~/.local/bin, `dirname` daria /home/você/.local e a raiz do repositório
+# ficaria errada — o `wf` sairia procurando tools/ dentro de .local e falharia
+# sem dizer por quê.
+EU="${BASH_SOURCE[0]}"
+while [[ -L "$EU" ]]; do
+    ALVO="$(readlink "$EU")"
+    [[ "$ALVO" == /* ]] && EU="$ALVO" || EU="$(dirname "$EU")/$ALVO"
+done
+RAIZ="$(cd "$(dirname "$EU")/.." && pwd)"
 JOGO="${WF_JOGO:-$HOME/.local/share/Steam/steamapps/common/RimWorld}"
 DADOS_P1="${WF_DADOS_P1:-$HOME/.config/unity3d/Ludeon Studios/RimWorld by Ludeon Studios}"
 DADOS_P2="${WF_DADOS_P2:-$HOME/.rimworld-jogador2}"
