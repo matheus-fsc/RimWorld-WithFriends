@@ -90,24 +90,56 @@ def cenario_menus(c, log):
     O menu flutuante é o gesto mais caro da interface — é onde rodam os
     `FloatMenuOptionProvider_*`, e foi num tick destes que uma partida contou
     229 mil consultas de alcançabilidade de um lado e zero do outro.
+
+    O custo do menu é multiplicativo: pawns selecionados × coisas na célula ×
+    provedores de opção. A primeira versão deste cenário selecionava três pawns
+    e apontava para célula vazia — deu 57 consultas, mil vezes menos que a
+    partida real, e passar num teste mil vezes mais leve não diz nada.
+
+    Então: seleção grande, e mira em célula POVOADA, que é onde o menu tem o que
+    oferecer.
     """
-    pawns = alistados(c) or c.pawns()[:3]
-    if not pawns:
+    todos = c.pawns()
+    if not todos:
         log("nenhum pawn — nada a apontar")
         return
 
-    c.cmd("selecionar " + " ".join(str(p["id"]) for p in pawns))
+    # Seleção grande: o menu roda os provedores para cada pawn selecionado.
+    selecao = [p for p in todos if p["colono"]] or todos
+    selecao = selecao[:20]
+    c.cmd("selecionar " + " ".join(str(p["id"]) for p in selecao))
+    log(f"{len(selecao)} pawn(s) selecionados")
 
-    for volta in range(20):
-        x, z = random.randint(10, 240), random.randint(10, 240)
+    for volta in range(24):
+        # Metade das voltas mira em cima de outro pawn (célula povoada, menu
+        # cheio); metade em célula qualquer, para variar o caminho.
+        if volta % 2 == 0 and len(todos) > 1:
+            alvo = random.choice(todos)
+            x, z = alvo["x"], alvo["z"]
+        else:
+            x, z = random.randint(10, 240), random.randint(10, 240)
+
         try:
-            c.cmd(f"menu {x},{z}")
+            opcoes = c.cmd(f"menu {x},{z}")
         except RuntimeError as e:
             log(f"menu {x},{z}: {e}")
+            continue
+
         c.cmd(f"olhar {x},{z}")
-        if volta % 5 == 0:
-            log(f"{volta + 1} menus abertos")
-        time.sleep(0.4)
+
+        # O arrasto é o que custa caro: o jogo refaz os destinos a cada célula
+        # que o mouse atravessa. Sem ele o cenário mede 87 consultas de
+        # alcançabilidade onde a partida real mediu 229 mil.
+        if volta % 3 == 0:
+            origem = random.choice(selecao)
+            try:
+                c.cmd(f"arrastar {origem['x']},{origem['z']} {x},{z} 30")
+            except RuntimeError as e:
+                log(f"arrasto: {e}")
+
+        if volta % 6 == 0:
+            log(f"volta {volta + 1}: menu em {x},{z} → {opcoes.split(':')[0]}")
+        time.sleep(0.3)
 
 
 def cenario_ajustes(c, log):
@@ -157,9 +189,31 @@ CENARIOS = {
 
 # ----------------------------------------------------------------------
 
+LOG_ANFITRIAO = os.path.expanduser(
+    "~/.config/unity3d/Ludeon Studios/RimWorld by Ludeon Studios/Player.log")
+
+
 def jogos_vivos():
     return subprocess.run(["pgrep", "-x", "RimWorldLinux"],
                           stdout=subprocess.DEVNULL).returncode == 0
+
+
+def desistiu():
+    """
+    O anfitrião disse que desistiu?
+
+    Contar processo não basta: o RimWorld headless às vezes fica preso no
+    `Root.Shutdown()` depois de já ter encerrado tudo, e aí "morreu" nunca
+    dispara e a espera vai até o prazo. Medido: o anfitrião desistiu às
+    22:42:32 e o orquestrador ficou esperando mais três minutos.
+
+    O marcador explícito é mais confiável que a ausência do processo.
+    """
+    try:
+        with open(LOG_ANFITRIAO, errors="replace") as f:
+            return "sem árbitro não há visita" in f.read()[-20000:]
+    except OSError:
+        return False
 
 
 def esperar_visita(porta, prazo, log):
@@ -182,6 +236,9 @@ def esperar_visita(porta, prazo, log):
                 if estado.get("sessao") == "Simulando" and int(estado.get("passo", 0)) > 0:
                     log(f"visita de pé no passo {estado['passo']}")
                     return "ok"
+                if desistiu():
+                    return "morreu"
+
                 if not avisou:
                     log(f"conectado; esperando a visita (sessão={estado.get('sessao')})")
                     avisou = True
@@ -190,6 +247,9 @@ def esperar_visita(porta, prazo, log):
             # Sem porta ainda é normal durante a carga; sem processo nenhum,
             # não. Três leituras seguidas para não confundir com a troca de
             # partida, em que o anfitrião reabre.
+            if desistiu():
+                return "morreu"
+
             sem_jogo = sem_jogo + 1 if not jogos_vivos() else 0
             if sem_jogo >= 3:
                 return "morreu"
@@ -238,7 +298,10 @@ def main():
              "--controle", str(args.porta), "--caminho"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
-    for tentativa in (1, 2):
+    # Três e não duas: o SIGSEGV de subida do mono pega o anfitrião OU o
+    # árbitro, e uma corrida precisa dos dois vivos. Com duas tentativas, duas
+    # mortes seguidas — uma de cada lado — davam desistência sem motivo real.
+    for tentativa in (1, 2, 3):
         lancar()
         log(f"emulação lançada (tentativa {tentativa}); esperando a visita")
 
@@ -246,8 +309,9 @@ def main():
         if resultado == "ok":
             break
 
-        if resultado == "morreu" and tentativa == 1:
-            log("o jogo morreu na subida — tentando de novo")
+        if resultado == "morreu" and tentativa < 3:
+            log(f"o jogo morreu na subida — tentando de novo ({tentativa + 1}/3)")
+            subprocess.run(["pkill", "-9", "-x", "RimWorldLinux"], stdout=subprocess.DEVNULL)
             time.sleep(3)
             continue
 

@@ -181,7 +181,8 @@ public static class PortaDeControle
                 return "ok estado | pawns [texto] | alistar ID 0|1 | ir ID x,z | " +
                        "incidente DEF [pontos] | velocidade NOME | despejar | sair " +
                        "| ajuste ID chave numero [texto] " +
-                       "|| interface: selecionar ID… | menu x,z | irarrastando x,z | olhar x,z";
+                       "|| interface: selecionar ID… | menu x,z | irarrastando x,z | " +
+                       "arrastar x1,z1 x2,z2 [passos] | olhar x,z";
 
             case "estado":
                 return Estado();
@@ -209,6 +210,9 @@ public static class PortaDeControle
 
             case "irarrastando":
                 return IrArrastando(partes);
+
+            case "arrastar":
+                return Arrastar(partes);
 
             case "olhar":
                 return Olhar(partes);
@@ -518,6 +522,75 @@ public static class PortaDeControle
 
         Find.CameraDriver.JumpToCurrentMapLoc(celula);
         return $"ok olhando para {celula.x},{celula.z}";
+    }
+
+    static readonly System.Reflection.FieldInfo? CampoDoFim =
+        AccessTools.Field(typeof(MultiPawnGotoController), "end");
+
+    /// <summary>
+    /// O arrasto do "ir aqui", célula a célula — o gesto mais caro da interface.
+    ///
+    /// <para><b>Por que o disparo único não bastava.</b> <c>irarrastando</c>
+    /// faz <c>StartInteraction</c> + <c>AddPawn</c> + <c>FinalizeInteraction</c>
+    /// e pronto. Mas o custo real não está no fim: está no <b>meio</b>, porque
+    /// enquanto o mouse anda o jogo refaz os destinos a cada quadro —</para>
+    ///
+    /// <code>
+    /// ProcessInputEvents() {                 // a cada quadro
+    ///     if (UI.MouseCell() != end) { end = …; RecomputeDestinations(); }
+    /// }
+    /// RecomputeDestinations() {              // por pawn selecionado
+    ///     RCellFinder.BestOrderedGotoDestNear(root, pawn, …);
+    /// }
+    /// </code>
+    ///
+    /// <para>É daí que saíram as 229 mil consultas de alcançabilidade num tick
+    /// de uma partida real. O cenário de menus, sem isto, produzia 87 —
+    /// passar num teste dois mil vezes mais leve que o caso real não diz
+    /// nada.</para>
+    ///
+    /// <para><c>end</c> é campo privado e <c>ProcessInputEvents</c> lê o mouse
+    /// de verdade, que uma instância sem tela não tem. Então o campo é escrito
+    /// por reflexão e <c>RecomputeDestinations</c> — que é público — é chamado
+    /// direto. O trabalho que sai é o mesmo.</para>
+    /// </summary>
+    static string Arrastar(string[] partes)
+    {
+        if (partes.Length < 3) return "erro uso: arrastar x1,z1 x2,z2 [passos]";
+
+        var seletor = Find.Selector;
+        if (seletor?.gotoController == null) return "erro sem seletor";
+
+        var inicio = LerCelula(partes[1]);
+        var fim = LerCelula(partes[2]);
+        if (!inicio.IsValid || !fim.IsValid) return "erro célula inválida (use x,z)";
+
+        int passos = partes.Length > 3 && int.TryParse(partes[3], out int p) ? Math.Max(p, 1) : 20;
+
+        var pawns = seletor.SelectedPawns.ToList();
+        if (pawns.Count == 0) return "erro nenhum pawn selecionado";
+
+        var controlador = seletor.gotoController;
+        controlador.StartInteraction(inicio);
+        foreach (var pawn in pawns) controlador.AddPawn(pawn);
+
+        // O mouse andando: uma célula interpolada por passo, e um recálculo de
+        // destinos em cada uma — que é exatamente o que o quadro faz.
+        for (int i = 1; i <= passos; i++)
+        {
+            float t = i / (float)passos;
+            var aqui = new IntVec3(
+                (int)Math.Round(inicio.x + (fim.x - inicio.x) * t), 0,
+                (int)Math.Round(inicio.z + (fim.z - inicio.z) * t));
+
+            CampoDoFim?.SetValue(controlador, aqui);
+            controlador.RecomputeDestinations();
+        }
+
+        controlador.FinalizeInteraction();
+
+        return $"ok arrasto de {inicio.x},{inicio.z} a {fim.x},{fim.z} " +
+               $"em {passos} passo(s), {pawns.Count} pawn(s)";
     }
 
     static IntVec3 LerCelula(string texto)

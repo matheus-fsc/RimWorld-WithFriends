@@ -306,6 +306,22 @@ public static class ModoArbitro
             "[WithFriends] o árbitro não apareceu online a tempo. " +
             "Veja o Player.log da pasta dele: save inexistente e planeta divergente " +
             "são as duas causas comuns.");
+
+        // **Numa emulação, desistir é sair.**
+        //
+        // Sem isto o anfitrião fica rodando no passo 0 até o prazo da visita
+        // inteira — medido: quatro minutos de nada, com o diário enchendo de
+        // linhas do tick zero. E quem orquestra de fora não tem como saber que
+        // acabou: o processo continua vivo, então "morreu na subida" não
+        // dispara e a corrida só termina por tempo.
+        //
+        // Falhar rápido e de forma visível vale mais do que esperar bonito.
+        if (ModoEmulacao.Ativo)
+        {
+            Log.Error("[WithFriends/emulação] sem árbitro não há visita — encerrando a corrida.");
+            DiarioDaInstancia.Fechar();
+            Root.Shutdown();
+        }
     }
 }
 
