@@ -404,14 +404,22 @@ decisão autoritativa: **onde a decisão do jogador entra na simulação**.
 clique vira mudança de estado, ou seja, exatamente o que precisaria virar
 comando.
 
-Estado em 14/09/2026:
+Estado em 15/09/2026:
 
 | | |
 |---|---|
 | registros no Multiplayer | 360 |
-| já é comando aqui | 6 |
+| já é comando aqui | 11 |
 | fora de escopo da visita | 95, em 8 motivos |
-| falta | 259, sendo 31 de pawn e 104 de comp |
+| falta | 254, sendo 26 de pawn e 104 de comp |
+
+**O que já é comando vem do código, não de uma lista à mão.** A primeira versão
+era escrita à mão e envelheceu em silêncio: cinco comandos de pawn foram
+implementados e o mapa continuou dizendo que faltavam. A fonte agora é o
+`CatalogoDePatches`, que o mod verifica na subida — se um alvo sumir numa
+atualização do jogo, ele avisa. Fica à mão só o que o catálogo não descreve:
+designadores (descobertos por varredura) e o filtro de estoque (estado, não
+membro).
 
 A lista de "fora de escopo" leva o motivo junto, e os motivos citam a seção do
 desenho: pesquisa, ideologia, caravana, comércio, missão, facção, política e

@@ -32,21 +32,32 @@ MP = os.path.join(AQUI, "..", "referencia", "repos", "Multiplayer",
                   "Source", "Client", "Syncing", "Game")
 CLIENTE = os.path.join(AQUI, "..", "client")
 
-# O que já vira comando aqui. Escrito à mão porque é curto e porque enganar-se
-# para mais seria pior do que não ter a lista: esconderia trabalho real.
-NOSSOS = {
-    "Pawn_DraftController.Drafted":            "Alistar",
-    "Pawn_DraftController.FireAtWill":         "Alternar",
-    "CompForbiddable.Forbidden":               "Alternar",
-    "Pawn_JobTracker.TryTakeOrderedJob":       "OrdemDeTrabalho",
+# O que já vira comando aqui, LIDO DO CÓDIGO.
+#
+# A primeira versão desta lista era escrita à mão, e envelheceu em silêncio:
+# cinco comandos de pawn foram implementados e o mapa continuou dizendo que
+# faltavam. Lista mantida à mão é exatamente o que o resto do projeto evita —
+# "o relatório é gerado, não mantido".
+#
+# A fonte é o catálogo de remendos, que o mod verifica na subida: se um alvo
+# sumir numa atualização do jogo, ele avisa. E o filtro é o próprio texto do
+# catálogo, porque lá cada entrada diz para que serve.
+CATALOGO = os.path.join(AQUI, "..", "client", "Patches", "CatalogoDePatches.cs")
+
+# O que o catálogo não cobre: intercepções que não são remendo de membro único
+# (designadores são descobertos por varredura, o filtro de estoque é estado).
+NOSSOS_A_MAO = {
+    "Designator.DesignateSingleCell":    "Designar (descoberto por varredura)",
+    "Designator.DesignateMultiCell":     "DesignarVarias (idem)",
+    "Designator.DesignateThing":         "Designar (idem)",
+    "StorageSettings.Priority":          "Estoque (estado, não membro)",
+    "ThingFilter":                       "Estoque (idem)",
+    "TickManager.CurTimeSpeed":          "Velocidade",
+    "CompForbiddable.Forbidden":         "Alternar",
+    "Pawn_DraftController.FireAtWill":   "Alternar",
     "Pawn_JobTracker.TryTakeOrderedJobPrioritizedWork": "OrdemPriorizada",
-    "Pawn_JobTracker.EndCurrentJob":           "EncerrarJob",
-    "Designator.DesignateSingleCell":          "Designar",
-    "Designator.DesignateMultiCell":           "DesignarVarias",
-    "Designator.DesignateThing":               "Designar",
-    "StorageSettings.Priority":                "Estoque",
-    "ThingFilter":                             "Estoque",
-    "TickManager.CurTimeSpeed":                "Velocidade",
+    "PawnColumnWorker_FollowDrafted.SetValue":   "AjusteDePawn (remendo no chamador)",
+    "PawnColumnWorker_FollowFieldwork.SetValue": "AjusteDePawn (idem)",
 }
 
 # Assuntos que a visita não toca (§4: decisão de colônia é de quem mora nela, e
@@ -62,6 +73,33 @@ FORA_DE_ESCOPO = [
     (r"Faction|Royal|Title|Permit", "relação de facção é da colônia"),
     (r"Genes?|Xenotype|Growth", "biotecnologia é projeto longo"),
 ]
+
+
+def nossos():
+    """(tipo.membro → recurso) do catálogo, só o que é comando de sessão."""
+    fora = dict(NOSSOS_A_MAO)
+    try:
+        texto = open(CATALOGO, encoding="utf8", errors="replace").read()
+    except OSError:
+        return fora
+
+    # Cada entrada é um bloco `new AlvoDePatch { Tipo = …, Membro = …, Recurso = … }`
+    padrao = (
+        r'Tipo\s*=\s*typeof\(([\w\.]+)\)\s*,\s*Membro\s*=\s*'
+        r'(?:nameof\(\s*[\w\.]*?(\w+)\s*\)|"(\w+)")\s*,\s*Recurso\s*=\s*"([^"]*)"'
+    )
+
+    for bloco in re.finditer(padrao, texto):
+        tipo = bloco.group(1).split(".")[-1]
+        membro = bloco.group(2) or bloco.group(3)
+        recurso = bloco.group(4)
+
+        # Só o que é ordem do jogador. "RNG isolado", "barreira de tick" e
+        # companhia são determinismo, não decisão — entram na outra conta.
+        if re.search(r"dentro de sessão|vira comando", recurso):
+            fora[f"{tipo}.{membro}"] = recurso
+
+    return fora
 
 
 def alvos_do_mp():
@@ -95,6 +133,7 @@ def main():
     todos = "--todos" in sys.argv
     so_nossos = "--nossos" in sys.argv
 
+    NOSSOS = nossos()
     alvos = alvos_do_mp()
     if not alvos:
         print(f"não achei os registros do Multiplayer em {MP}", file=sys.stderr)
