@@ -389,11 +389,21 @@ public static class RastreioDeRng
     /// <summary>
     /// A sequência de sorteios de uma janela <b>estreita</b> em volta do tick.
     ///
-    /// <para>Estreita de propósito. A agregação por local cobre o anel inteiro
-    /// porque é barata de ler; a sequência é uma linha por sorteio, e o que se
-    /// quer dela é uma coisa só: <b>em que índice as duas histórias se
-    /// separam</b>. Para isso bastam alguns ticks em volta do primeiro que
-    /// divergiu — e o comparador já sabe qual é, porque o contador por tick diz.</para>
+    /// <para><b>A janela precisa vir ANTES, e larga.</b> A primeira versão
+    /// pegava seis ticks de cada lado do ponto de rollback, e não serviu para
+    /// nada: numa divergência real o rollback foi para o tick 1016 e o contador
+    /// de sorteios já diferia desde o <b>865</b> — 151 ticks antes, fora da
+    /// janela inteira.</para>
+    ///
+    /// <para>O motivo é que "último ponto consistente" é o que a <b>digital</b>
+    /// enxerga, e ela é mais grossa que o contador por tick: ela amostra em
+    /// intervalos, e composição diferente com total parecido passa por ela. O
+    /// ponto de rollback é onde se pode voltar com segurança, não onde a coisa
+    /// começou.</para>
+    ///
+    /// <para>Então a janela vai 200 ticks para trás. São umas dez mil linhas —
+    /// caro, mas o despejo agregado já é dessa ordem, e uma sequência que não
+    /// alcança a divergência custa a corrida inteira.</para>
     ///
     /// <para>Nasceu de um tick em que o total diferia por 3 e a composição
     /// diferia por dezenas: quatro escolhas de destino a mais de um lado, duas
@@ -401,18 +411,21 @@ public static class RastreioDeRng
     /// por local, isso é indistinguível de ruído; em sequência, é o índice
     /// exato.</para>
     /// </summary>
-    const int TicksDeSequencia = 6;
+    const int TicksDeSequenciaAntes = 200;
+    const int TicksDeSequenciaDepois = 8;
 
     static void DespejarSequencia(long tickDoAborto)
     {
+        long de = tickDoAborto - TicksDeSequenciaAntes;
+        long ate = tickDoAborto + TicksDeSequenciaDepois;
+
         var texto = new StringBuilder();
         texto.AppendLine(
-            $"[WithFriends] sequência de sorteios — ticks " +
-            $"{tickDoAborto - TicksDeSequencia} a {tickDoAborto + TicksDeSequencia}\n" +
+            $"[WithFriends] sequência de sorteios — ticks {de} a {ate}\n" +
             "  (um sorteio por linha, na ordem em que aconteceram; o primeiro índice\n" +
             "   que diferir entre os dois lados é onde as histórias se separam)");
 
-        for (long tick = tickDoAborto - TicksDeSequencia; tick <= tickDoAborto + TicksDeSequencia; tick++)
+        for (long tick = de; tick <= ate; tick++)
         {
             var sequencia = SequenciaDe(tick);
             if (sequencia.Count == 0) continue;
