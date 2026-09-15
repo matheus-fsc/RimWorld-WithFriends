@@ -52,6 +52,7 @@ wf — linha de comando do With Friends
       --caminho                    rastreia as decisões do pathfinding
       --velocidade V               Normal|Fast|Superfast|Ultrafast (padrão Fast)
       --controle P                 porta de controle: anfitrião em P, árbitro em P+1
+      --semdigital                 não detectar divergência (medir deriva; ADR 0022)
   wf comparar                      compara os dois diários mais novos
   wf erros [--todos]               agrupa erros e avisos; destaca os de um lado só
   wf controle [--porta P] [cmd]    dirige um jogo aberto com -controle=P
@@ -180,7 +181,7 @@ cmd_rodar() {
 }
 
 cmd_emular() {
-    local visivel=0 sangue=0 caminho=0 roteiro="" velocidade="" controle="" args=() pegar_roteiro=0 pegar_vel=0 pegar_ctl=0
+    local visivel=0 sangue=0 caminho=0 semdigital=0 roteiro="" velocidade="" controle="" args=() pegar_roteiro=0 pegar_vel=0 pegar_ctl=0
     for a in "$@"; do
         if [[ $pegar_roteiro -eq 1 ]]; then roteiro="$a"; pegar_roteiro=0; continue; fi
         if [[ $pegar_vel -eq 1 ]]; then velocidade="$a"; pegar_vel=0; continue; fi
@@ -189,6 +190,7 @@ cmd_emular() {
             --visivel)   visivel=1 ;;
             --sangue)    sangue=1 ;;
             --caminho)   caminho=1 ;;
+            --semdigital) semdigital=1 ;;
             --roteiro)   pegar_roteiro=1 ;;
             --roteiro=*) roteiro="${a#*=}" ;;
             --velocidade)   pegar_vel=1 ;;
@@ -216,6 +218,8 @@ cmd_emular() {
     [[ $caminho -eq 1 ]] && extra="$extra -rastrearcaminho"
     [[ -n "$velocidade" ]] && extra="$extra -emulacaovelocidade=$velocidade"
     [[ -n "$controle" ]] && extra="$extra -controle=$controle"
+    # Medição da ADR 0022: a digital fica calada e os dois lados correm livres.
+    [[ ${semdigital:-0} -eq 1 ]] && extra="$extra -semdigital"
     if [[ $visivel -eq 1 ]]; then
         semtela=""
         # Unity abre em tela cheia por padrão, e duas instâncias em tela cheia

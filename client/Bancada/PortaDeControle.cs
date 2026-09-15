@@ -180,7 +180,7 @@ public static class PortaDeControle
             case "ajuda":
                 return "ok estado | pawns [texto] | alistar ID 0|1 | ir ID x,z | " +
                        "incidente DEF [pontos] | velocidade NOME | despejar | sair " +
-                       "| ajuste ID chave numero [texto] " +
+                       "| ajuste ID chave numero [texto] | divergir raid [pontos] " +
                        "|| interface: selecionar ID… | menu x,z | irarrastando x,z | " +
                        "arrastar x1,z1 x2,z2 [passos] | olhar x,z";
 
@@ -219,6 +219,9 @@ public static class PortaDeControle
 
             case "ajuste":
                 return Ajuste(partes);
+
+            case "divergir":
+                return Divergir(partes);
 
             case "despejar":
                 RastreioDePawns.Despejar();
@@ -280,6 +283,53 @@ public static class PortaDeControle
             default:
                 return $"erro ajuste desconhecido: {chave} (prioridade | area | mestre)";
         }
+    }
+
+    /// <summary>
+    /// Provoca uma divergência <b>de propósito</b>, só deste lado.
+    ///
+    /// <para><b>A única coisa aqui que fura o caminho de comando, e por quê.</b>
+    /// Todo o resto da porta entra pela mesma porta do clique justamente para
+    /// que o teste meça o jogo. Este comando faz o oposto: aplica local e não
+    /// propõe nada, porque o que ele mede é o que acontece quando os dois lados
+    /// <b>não</b> são iguais.</para>
+    ///
+    /// <para>Existe para uma pergunta da ADR 0022 que não tem outro jeito de
+    /// responder: quanto duas simulações se afastam a partir de uma divergência
+    /// <b>grande</b>. A deriva já medida partiu de uma pequena (uma escolha de
+    /// job) e deu cinco pawns em 151 depois de dois minutos; a partir de um
+    /// assalto chegando de um lado só, ninguém sabe.</para>
+    ///
+    /// <para>Use com <c>-semdigital</c>, senão a ressincronização desfaz a
+    /// divergência antes de ela ser medida — que é o desenho funcionando.</para>
+    /// </summary>
+    static string Divergir(string[] partes)
+    {
+        if (partes.Length < 2) return "erro uso: divergir raid [pontos]";
+        if (partes[1] != "raid") return $"erro divergência desconhecida: {partes[1]}";
+
+        var mapa = Find.CurrentMap;
+        if (mapa == null) return "erro sem mapa";
+
+        float pontos = partes.Length > 2 && float.TryParse(partes[2], out float p)
+            ? p
+            : StorytellerUtility.DefaultThreatPointsNow(mapa);
+
+        var def = IncidentDefOf.RaidEnemy;
+        var parms = StorytellerUtility.DefaultParmsNow(def.category, mapa);
+        parms.points = pontos;
+
+        int antes = mapa.mapPawns.AllPawnsSpawned.Count;
+        bool deu = def.Worker.TryExecute(parms);
+        int depois = mapa.mapPawns.AllPawnsSpawned.Count;
+
+        Log.Warning(
+            $"[WithFriends/medição] divergência provocada SÓ NESTE LADO: " +
+            $"assalto de {pontos:F0} pontos, {depois - antes} pawn(s) a mais.");
+
+        return deu
+            ? $"ok divergência local: {depois - antes} pawn(s) a mais ({pontos:F0} pontos)"
+            : "erro o assalto recusou executar";
     }
 
     static string Estado()

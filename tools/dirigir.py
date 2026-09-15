@@ -216,6 +216,16 @@ def desistiu():
         return False
 
 
+def lado_vivo(porta):
+    """Aquela instância responde e já carregou o mod?"""
+    try:
+        with Controle(porta, tempo=4.0) as c:
+            c.cmd("estado")
+            return True
+    except (OSError, RuntimeError):
+        return False
+
+
 def esperar_visita(porta, prazo, log):
     """
     Espera a porta responder e a sessão chegar em Simulando.
@@ -234,7 +244,23 @@ def esperar_visita(porta, prazo, log):
             with Controle(porta, tempo=5.0) as c:
                 estado = c.estado()
                 if estado.get("sessao") == "Simulando" and int(estado.get("passo", 0)) > 0:
-                    log(f"visita de pé no passo {estado['passo']}")
+                    # **Os DOIS lados, não só este.**
+                    #
+                    # O arranque do jogo falha sozinho neste ambiente — medido
+                    # em 12% a 40%, antes de qualquer mod carregar, logo depois
+                    # de a inicialização da Steam falhar. Não é defeito nosso e
+                    # não dá para consertar daqui; dá para não começar em cima
+                    # dele.
+                    #
+                    # Começar o cenário com um lado morto gasta a corrida
+                    # inteira para descobrir no fim que não havia com quem
+                    # comparar.
+                    if not lado_vivo(porta + 1):
+                        log("o outro lado não responde — ainda não estável")
+                        time.sleep(2)
+                        continue
+
+                    log(f"os dois lados de pé; visita no passo {estado['passo']}")
                     return "ok"
                 if desistiu():
                     return "morreu"
@@ -298,10 +324,18 @@ def main():
              "--controle", str(args.porta), "--caminho"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
-    # Três e não duas: o SIGSEGV de subida do mono pega o anfitrião OU o
-    # árbitro, e uma corrida precisa dos dois vivos. Com duas tentativas, duas
-    # mortes seguidas — uma de cada lado — davam desistência sem motivo real.
-    for tentativa in (1, 2, 3):
+    # **Tentar até ficar estável, não tentar um número bonito de vezes.**
+    #
+    # O arranque falha sozinho neste ambiente entre 12% e 40% das vezes (medido:
+    # 3 em 8 numa condição, 1 em 8 noutra, 0 em 16 com a máquina fresca), antes
+    # de qualquer mod carregar. Com falha independente de ~40% por lado, cinco
+    # tentativas deixam a chance de não conseguir nenhuma abaixo de 1%.
+    #
+    # E cada tentativa começa do zero: mata tudo antes, porque instância presa
+    # no desligamento disputa com a nova.
+    for tentativa in range(1, 6):
+        subprocess.run(["pkill", "-9", "-x", "RimWorldLinux"], stdout=subprocess.DEVNULL)
+        time.sleep(2)
         lancar()
         log(f"emulação lançada (tentativa {tentativa}); esperando a visita")
 
@@ -309,8 +343,8 @@ def main():
         if resultado == "ok":
             break
 
-        if resultado == "morreu" and tentativa < 3:
-            log(f"o jogo morreu na subida — tentando de novo ({tentativa + 1}/3)")
+        if resultado in ("morreu", "prazo") and tentativa < 5:
+            log(f"subida instável ({resultado}) — tentando de novo ({tentativa + 1}/5)")
             subprocess.run(["pkill", "-9", "-x", "RimWorldLinux"], stdout=subprocess.DEVNULL)
             time.sleep(3)
             continue

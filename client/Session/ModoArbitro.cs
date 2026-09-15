@@ -219,6 +219,7 @@ public static class ModoArbitro
                 ? $" -emulacaovelocidade={vel}" : "") +
             // O árbitro na porta seguinte: duas instâncias não dividem socket, e
             // quem dirige precisa poder falar com os dois lados.
+            (SessaoCliente.SemDigital ? " -semdigital" : "") +
             (GenCommandLine.TryGetCommandLineArg("controle", out string ctl)
                 && int.TryParse(ctl, out int porta)
                 ? $" -controle={porta + 1}" : "");

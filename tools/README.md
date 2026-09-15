@@ -453,3 +453,47 @@ em qualquer um dos dois desenhos.
 
 Reusar a lista é reusar conhecimento de domínio, não código: cada linha dela foi
 paga com o bug de alguém.
+
+## O arranque do jogo falha sozinho
+
+Medido em 15/09/2026, e vale registrar para ninguém investigar de novo.
+
+O jogo morre com `Caught fatal signal - signo:11` durante a subida, **antes de
+qualquer mod carregar** — a última linha antes do crash é:
+
+```
+RimWorld 1.6.4871 rev600
+Save data folder overridden to …
+Caught fatal signal - signo:11
+```
+
+Numa subida boa, `Adding withfriends.rimworld(...)` só aparece dezenas de linhas
+depois. Então não é nosso: o `LoadedModManager` nem rodou.
+
+O que foi descartado, com medida:
+
+| hipótese | resultado |
+|---|---|
+| `dotnet build` logo antes do lançamento | 16 subidas, 16 ok — **descartada** |
+| duas instâncias ao mesmo tempo | crasha igual com uma só — **descartada** |
+| memória | sem correlação (3045 MB → ok, 3666 MB → crash) |
+| threads de trabalho do Unity | `-job-worker-count=4` não mudou nada |
+| `steam_appid.txt` | 1 crash em 8 sem ele, contra 3 em 8 com — indício fraco, n pequeno |
+
+A taxa varia com o estado da máquina: 0 em 16 logo no começo da sessão, 3 em 8
+mais tarde nas mesmas condições. O vizinho imediato no log é a falha de
+inicialização da Steam (`create pipe failed`, com a Steam fechada), que é um
+caminho que a Ludeon provavelmente não exercita muito.
+
+### O que se faz a respeito
+
+Não dá para consertar daqui. Dá para não construir em cima:
+
+- **`wf dirigir` tenta até ficar estável** — cinco tentativas, matando tudo entre
+  elas, e só começa o cenário quando **os dois lados** respondem. Com ~40% de
+  falha independente por lado, cinco tentativas põem a chance de fracasso total
+  abaixo de 1%.
+- Começar o cenário com um lado morto gasta a corrida inteira para descobrir no
+  fim que não havia com quem comparar — foi o que aconteceu três vezes.
+- Se for testar à mão e a subida morrer, é só tentar de novo: não procure o que
+  você mudou.

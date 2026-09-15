@@ -123,6 +123,10 @@ public static class ModoAvulso
             $"{RastreioDePawns.TotalDeHediffs} hediff(s) — " +
             $"{RastreioDePawns.TotalDeDanos / (float)Math.Max(andados, 1):F2} dano(s) por tick");
 
+        // O estado por tick, para medir deriva entre duas bancadas do mesmo
+        // save — ver AmostraDaBancada e a ADR 0022.
+        RastreioDePawns.Despejar();
+
         RetratoDaPartida.Registrar("fim da corrida");
 
         Log.Message($"[WithFriends/bancada] diário: {DiarioDaInstancia.Caminho}");

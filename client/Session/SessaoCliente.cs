@@ -1038,6 +1038,13 @@ public sealed class SessaoCliente
             $"{RelogioDeSessaoRimWorld.LimiteDeTick}, conexão {conexao}).");
     }
 
+    /// <summary>
+    /// <c>-semdigital</c>: não reportar a digital, para medir deriva. Ver o
+    /// comentário em <c>TickCompleto</c>. Nunca ligue isto para jogar.
+    /// </summary>
+    public static readonly bool SemDigital =
+        GenCommandLine.CommandLineArgPassed("semdigital");
+
     const float SegundosParadoParaAvisar = 5f;
     const float SegundosEntreAvisosDeParada = 10f;
 
@@ -1060,7 +1067,25 @@ public sealed class SessaoCliente
         if (mapaDaVisita >= 0) digital.AmostrarMapa(mapaDaVisita);
         else digital.AmostrarMundo();
 
-        digitalPendente = (tickDeSessao, digital.FecharIntervalo(tickDeSessao).Resumo());
+        var opiniao = digital.FecharIntervalo(tickDeSessao);
+
+        // **Modo de medição: a digital fica calada.**
+        //
+        // Não é para uso normal. Existe para responder uma pergunta da ADR 0022
+        // que não tem outro jeito de medir: **quanto duas simulações se afastam
+        // quando rodam livres a partir de uma divergência grande.**
+        //
+        // Dentro de uma visita a divergência é detectada e DESFEITA em poucos
+        // passos — que é o desenho funcionando, e é exatamente o que impede a
+        // medida. E fora da visita não serve: duas bancadas do mesmo save não
+        // começam iguais (medido: 143 de 151 pawns em posição diferente já na
+        // primeira amostra), porque o RNG só é isolado e semeado dentro dela.
+        //
+        // Então o único lugar onde os dois lados PARTEM idênticos é a visita, e
+        // a única forma de deixá-los correr é a digital não falar. A barreira
+        // continua andando, os passos continuam casados, e o estado diverge à
+        // vontade — que é a condição da medida.
+        if (!SemDigital) digitalPendente = (tickDeSessao, opiniao.Resumo());
 
         // **Os dois relógios, lado a lado, em toda amostra.**
         //
