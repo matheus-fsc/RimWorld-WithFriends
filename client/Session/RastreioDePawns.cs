@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using HarmonyLib;
 using UnityEngine;
 using Verse;
 
@@ -161,12 +162,36 @@ public static class RastreioDePawns
 
     static int proximaPosicao;
 
+    /// <summary>
+    /// Eventos de saúde deste tick: dano aplicado e hediff acrescentado.
+    ///
+    /// <para><b>Para que serve o número.</b> Há uma proposta de arquitetura em
+    /// que o anfitrião passa a ser autoritativo sobre <b>decisão</b> — job,
+    /// dano, saúde — e o visitante só executa e é corrigido. Ela se decide por
+    /// conta: quanto tráfego custaria. Job já foi medido (3,6 por tick). Dano
+    /// e saúde é o outro termo, e ninguém tinha contado.</para>
+    /// </summary>
+    static int danosNoTick, hediffsNoTick;
+
+    /// <summary>
+    /// Totais da corrida inteira. A bancada não tem sessão e nunca chama
+    /// <see cref="ComecarTick"/>, então é por aqui que ela mede.
+    /// </summary>
+    public static long TotalDeDanos { get; private set; }
+
+    public static long TotalDeHediffs { get; private set; }
+
+    public static void AnotarDano() { if (!Ligado) return; danosNoTick++; TotalDeDanos++; }
+    public static void AnotarHediff() { if (!Ligado) return; hediffsNoTick++; TotalDeHediffs++; }
+
     /// <summary>Chamado no começo de cada passo, antes de tickar.</summary>
     public static void ComecarTick()
     {
         if (!Ligado) return;
         posicaoNoTick.Clear();
         proximaPosicao = 0;
+        danosNoTick = 0;
+        hediffsNoTick = 0;
     }
 
     public static void AnotarOrdem(Pawn pawn)
@@ -279,7 +304,8 @@ public static class RastreioDePawns
         var clima = mapa.weatherManager;
 
         return
-            $"    ~mapa   clima idade {clima?.curWeatherAge ?? -1,7} " +
+            $"    ~mapa   dano {danosNoTick,3} hediff {hediffsNoTick,3} " +
+            $"clima idade {clima?.curWeatherAge ?? -1,7} " +
             $"mult {(clima?.CurMoveSpeedMultiplier ?? 0f).ToString("R", System.Globalization.CultureInfo.InvariantCulture),-12} " +
             $"precisao {(clima?.CurWeatherAccuracyMultiplier ?? 0f).ToString("R", System.Globalization.CultureInfo.InvariantCulture)}";
     }
@@ -395,5 +421,33 @@ public static class DeltaDaSaudeAnotado
             RastreioDePawns.AnotarDeltaDaSaude(pawn, delta);
             RastreioDePawns.AnotarOrdem(pawn);
         }
+    }
+}
+
+/// <summary>
+/// Conta dano e hediff por tick — ver <c>RastreioDePawns.AnotarDano</c>.
+///
+/// <para>Postfix puro, sem alterar nada. <c>Thing.TakeDamage</c> é a porta por
+/// onde todo dano passa, e <c>AddHediff</c> a de toda mudança de saúde que não
+/// é dano direto (infecção, droga, cirurgia).</para>
+/// </summary>
+[HarmonyPatch]
+public static class EventosDeSaudeContados
+{
+    static System.Collections.Generic.IEnumerable<System.Reflection.MethodBase> TargetMethods()
+    {
+        yield return AccessTools.Method(typeof(Thing), nameof(Thing.TakeDamage));
+
+        // AddHediff tem sobrecargas; a de Hediff é a que todas acabam chamando.
+        var add = AccessTools.Method(typeof(Pawn_HealthTracker), nameof(Pawn_HealthTracker.AddHediff),
+            new[] { typeof(Hediff), typeof(BodyPartRecord), typeof(DamageInfo?), typeof(DamageWorker.DamageResult) });
+        if (add != null) yield return add;
+    }
+
+    [HarmonyPostfix]
+    public static void Depois(System.Reflection.MethodBase __originalMethod)
+    {
+        if (__originalMethod.Name == nameof(Thing.TakeDamage)) RastreioDePawns.AnotarDano();
+        else RastreioDePawns.AnotarHediff();
     }
 }

@@ -115,6 +115,14 @@ public static class ModoAvulso
             $"{DiarioDaInstancia.Avisos} aviso(s) durante a corrida " +
             "— qualquer um deles é motivo para olhar o diário.");
 
+        // Taxa de eventos de saúde: é o segundo termo da conta de "quanto
+        // custaria o anfitrião ser autoritativo sobre decisão" — o primeiro,
+        // atribuição de job, já foi medido em 3,6 por tick.
+        Log.Message(
+            $"[WithFriends/bancada] eventos de saúde: {RastreioDePawns.TotalDeDanos} dano(s), " +
+            $"{RastreioDePawns.TotalDeHediffs} hediff(s) — " +
+            $"{RastreioDePawns.TotalDeDanos / (float)Math.Max(andados, 1):F2} dano(s) por tick");
+
         RetratoDaPartida.Registrar("fim da corrida");
 
         Log.Message($"[WithFriends/bancada] diário: {DiarioDaInstancia.Caminho}");
