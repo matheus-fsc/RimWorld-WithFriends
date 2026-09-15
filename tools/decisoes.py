@@ -122,6 +122,67 @@ def alvos_do_mp():
     return fora
 
 
+DECOMPILADO = os.environ.get(
+    "WF_DECOMPILADO",
+    "/tmp/claude-1000/-home-math-Dev-RimWorld-WithFriends/"
+    "bb748b79-8b07-47b2-8c8e-e2d6323fc3c2/scratchpad/dec/Assembly-CSharp.decompiled.cs")
+
+
+def formas(alvos):
+    """
+    A forma de cada membro no jogo: bool, propriedade simples, ou método.
+
+    É o que separa "herdável de graça" de "trabalho de verdade". Um `bool` cabe
+    no registro de `Alternar` com uma linha; uma propriedade simples cabe no de
+    `AjusteDePawn`; um método precisa de intercepção própria — e se for
+    `GetGizmos`, precisa identificar o closure, que é o caso mais caro e a razão
+    de o Multiplayer ter 227 registros de lambda.
+
+    Precisa do assembly decompilado (WF_DECOMPILADO ou o padrão):
+
+        ilspycmd -o /tmp/dec referencia/jogo/steam-*/Managed/Assembly-CSharp.dll
+    """
+    try:
+        src = open(DECOMPILADO, encoding="utf8", errors="replace").read()
+    except OSError:
+        return None
+
+    classes = {}
+    for m in re.finditer(
+            r"^\t(?:public |internal |sealed |abstract |static |partial )*class (\w+)", src, re.M):
+        classes.setdefault(m.group(1), m.start())
+
+    fora = {}
+    for alvo in alvos:
+        tipo, _, membro = alvo.partition(".")
+        pos = classes.get(tipo)
+        if pos is None:
+            fora[alvo] = "?"
+            continue
+
+        trecho = src[pos:pos + 120000]
+        esc = re.escape(membro)
+
+        p1 = re.search(rf"\n\t\t(?:public |protected |internal )(?:virtual |override |static )?"
+                       rf"([\w<>\[\]\.\?]+) {esc}\s*(?:\n\t\t\{{|=> )", trecho)
+        c1 = re.search(rf"\n\t\t(?:public |protected |internal )(?:static |readonly )*"
+                       rf"([\w<>\[\]\.\?]+) {esc}\s*[;=]", trecho)
+        tipo_membro = (p1 or c1).group(1) if (p1 or c1) else None
+
+        if tipo_membro == "bool":
+            fora[alvo] = "bool"
+        elif tipo_membro:
+            fora[alvo] = "valor"
+        elif membro in ("GetGizmos", "GetMultiSelectFloatMenuOptions", "CompFloatMenuOptions",
+                        "ExtraFloatMenuOptions", "CompGetGizmosExtra",
+                        "GetFloatMenuOptionsForPawn", "Inspect"):
+            fora[alvo] = "closure"
+        else:
+            fora[alvo] = "método"
+
+    return fora
+
+
 def fora_de_escopo(alvo):
     for padrao, motivo in FORA_DE_ESCOPO:
         if re.search(padrao, alvo, re.I):
@@ -132,6 +193,7 @@ def fora_de_escopo(alvo):
 def main():
     todos = "--todos" in sys.argv
     so_nossos = "--nossos" in sys.argv
+    por_forma = "--forma" in sys.argv
 
     NOSSOS = nossos()
     alvos = alvos_do_mp()
@@ -185,6 +247,33 @@ def main():
             print(f"\n  -- {chave}")
             for a in itens:
                 print(f"     {a}")
+
+    if por_forma:
+        f = formas(faltando)
+        if f is None:
+            print(f"\n  (--forma precisa do assembly decompilado em {DECOMPILADO})")
+        else:
+            contagem = {}
+            for alvo in faltando:
+                contagem.setdefault(f[alvo], []).append(alvo)
+
+            legenda = {
+                "bool":    "uma linha no registro de Alternar",
+                "valor":   "uma linha no registro de AjusteDePawn",
+                "closure": "botão cuja ação é lambda — o caso caro (MP: 227 registros)",
+                "método":  "intercepção própria, uma a uma",
+                "?":       "tipo não encontrado no assembly",
+            }
+            print("\n== por forma do membro — o que é herdável de graça\n")
+            for chave in ("bool", "valor", "método", "closure", "?"):
+                itens = contagem.get(chave, [])
+                if itens:
+                    print(f"  {chave:<9} {len(itens):>3}   {legenda[chave]}")
+            if todos:
+                for chave in ("bool", "valor"):
+                    print(f"\n  -- {chave}")
+                    for alvo in contagem.get(chave, []):
+                        print(f"     {alvo}")
 
     print(f"\n== fora de escopo ({len(fora)})\n")
     vistos = set()

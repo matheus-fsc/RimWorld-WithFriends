@@ -426,7 +426,28 @@ desenho: pesquisa, ideologia, caravana, comércio, missão, facção, política 
 biotecnologia não acontecem numa visita de minutos. Lista de silêncio sem motivo
 vira lugar onde trabalho se esconde.
 
-A família **pawn** (31) é a que uma visita de verdade exercita — prioridade de
+`wf decisoes --forma` classifica o que falta pela forma do membro no jogo, que é
+o que separa herdável de graça de trabalho de verdade:
+
+```
+bool       11   uma linha no registro de Alternar
+valor      20   uma linha no registro de AjusteDePawn
+método    124   intercepção própria, uma a uma
+closure    96   botão cuja ação é lambda — o caso caro
+```
+
+Os 96 são o número que decide rumo: botão cujo efeito é um closure escrevendo num
+campo privado não tem fonte para remendar, é preciso identificar o lambda — e é
+por isso que o Multiplayer tem 227 registros de delegate além dos de método. Ver
+a ADR 0022.
+
+Precisa do assembly decompilado (`WF_DECOMPILADO`, ou o padrão do scratchpad):
+
+```
+ilspycmd -o /tmp/dec referencia/jogo/steam-*/Managed/Assembly-CSharp.dll
+```
+
+A família **pawn** é a que uma visita de verdade exercita — prioridade de
 trabalho, restrição de área, seguir alistado, treinar animal. É por onde começar
 em qualquer um dos dois desenhos.
 
