@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using HarmonyLib;
 using RimWorld;
 using Verse;
 using Verse.AI;
@@ -134,7 +135,18 @@ public static class PortaDeControle
         return false;
     }
 
-    /// <summary>Chamado a cada quadro. Executa o que chegou, na thread certa.</summary>
+    /// <summary>
+    /// Chamado a cada quadro — <b>com partida aberta ou sem</b>.
+    ///
+    /// <para>A primeira versão era bombeada por um <c>GameComponent</c>, que só
+    /// existe dentro de uma partida. Numa instância dirigida por gente isso
+    /// quebra o uso principal: quem abre o jogo cai no menu, quem está do outro
+    /// lado da porta conecta, manda <c>estado</c> — e fica pendurado até o teto
+    /// de tempo, porque não há quadro de partida para responder.</para>
+    ///
+    /// <para>Agora quem bombeia são os dois <c>Update</c> de raiz: o do menu e o
+    /// da partida. Responder "fora de partida" é uma resposta.</para>
+    /// </summary>
     public static void Atender()
     {
         if (!Ativa) return;
@@ -458,4 +470,22 @@ public static class PortaDeControle
 
     static Pawn? Achar(int id) =>
         Find.Maps?.SelectMany(m => m.mapPawns.AllPawns).FirstOrDefault(p => p.thingIDNumber == id);
+}
+
+/// <summary>
+/// A porta responde no menu principal também — ver <see cref="PortaDeControle.Atender"/>.
+/// </summary>
+[HarmonyPatch(typeof(Root_Entry), nameof(Root_Entry.Update))]
+public static class ControleNoMenu
+{
+    [HarmonyPostfix]
+    public static void Depois() => PortaDeControle.Atender();
+}
+
+/// <summary>E dentro da partida, que é onde a maior parte dos comandos vale.</summary>
+[HarmonyPatch(typeof(Root_Play), nameof(Root_Play.Update))]
+public static class ControleNaPartida
+{
+    [HarmonyPostfix]
+    public static void Depois() => PortaDeControle.Atender();
 }

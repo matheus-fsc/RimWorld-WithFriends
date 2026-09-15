@@ -93,8 +93,14 @@ def main():
     try:
         with Controle(args.porta) as c:
             if args.comando:
-                print(c.cmd(" ".join(args.comando)))
-                return 0
+                # Erro do jogo é resposta, não defeito do cliente: sai com 1 e
+                # uma linha, sem traceback.
+                try:
+                    print(c.cmd(" ".join(args.comando)))
+                    return 0
+                except RuntimeError as e:
+                    print(f"erro: {e}", file=sys.stderr)
+                    return 1
 
             # Sem tty é roteiro pela entrada padrão; com tty é conversa.
             interativo = sys.stdin.isatty()

@@ -292,6 +292,33 @@ simulação. Se o caminho do comando estiver quebrado, o teste quebra junto, que
 o que se quer de um teste. Dentro de uma visita, `incidente` vira comando de
 sessão e obedece a autoridade da §4; fora dela, dispara local.
 
+### Instância dirigida por gente, depurada de fora
+
+O caso em que **você joga** e alguém (ou alguma ferramenta) observa de fora:
+
+```
+wf jogos --servidor --controle 25600 --caminho
+```
+
+Anfitrião em `25600`, segunda instância em `25601`. Você joga normal; do outro
+lado:
+
+```
+wf controle estado                      # tick, velocidade, pawns, estado da sessão
+wf controle --porta 25601 estado        # o outro lado, ao mesmo tempo
+wf controle pawns Kasumi
+wf controle despejar                    # força o despejo do rastreio no diário
+```
+
+A porta responde **desde o menu principal**, antes de você carregar colônia —
+`estado` devolve `fora de partida`. Isso custou um conserto: a primeira versão
+era bombeada por um `GameComponent`, que só existe dentro de uma partida, e quem
+conectasse no menu ficava pendurado até o teto de tempo.
+
+Comparar os dois lados em tempo real, enquanto você joga, é o ponto: `estado`
+nos dois diz na hora se os passos estão andando juntos, sem esperar o fim da
+corrida.
+
 ### Como roteiro
 
 ```python

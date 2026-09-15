@@ -253,6 +253,13 @@ public static class CatalogoDePatches
         },
         new AlvoDePatch
         {
+            Tipo = typeof(Root_Play),
+            Membro = nameof(Root_Play.Update),
+            Recurso = "porta de controle dentro da partida",
+            Motivo = "o socket lê numa thread de fundo; quem executa é o quadro, porque as APIs do jogo não são seguras fora da principal",
+        },
+        new AlvoDePatch
+        {
             Tipo = typeof(Verse.AI.Pawn_JobTracker),
             Membro = nameof(Verse.AI.Pawn_JobTracker.EndCurrentJob),
             Recurso = "encerrar job dentro de sessão",
