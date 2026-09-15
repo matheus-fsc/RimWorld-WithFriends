@@ -118,9 +118,12 @@ def cenario_ajustes(c, log):
     tick seguinte, que é exatamente a divergência que custou o dia 14 (um lado
     escolhendo Clean, o outro BuildRoof).
     """
-    colonos = [p for p in c.pawns() if not p["alistado"]][:4] or c.pawns()[:4]
+    # Colono de verdade, não "quem não está alistado": aquilo pega animal, e
+    # animal não tem prioridade de trabalho. A primeira corrida deste cenário
+    # exercitou só `area` por causa disso.
+    colonos = [p for p in c.pawns() if p["colono"]][:4]
     if not colonos:
-        log("nenhum pawn — nada a ajustar")
+        log("nenhum colono livre — nada a ajustar")
         return
 
     trabalhos = ["Cleaning", "Hauling", "Construction", "Growing", "Cooking"]

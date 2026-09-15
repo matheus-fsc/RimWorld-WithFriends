@@ -306,9 +306,18 @@ public static class PortaDeControle
             .OrderBy(p => p.thingIDNumber)
             .Take(60)
             .Select(p =>
-                $"{p.thingIDNumber}:{p.LabelShort}:{p.Position.x},{p.Position.z}:" +
+                // O rótulo vai higienizado: os registros são separados por
+                // espaço e os campos por dois-pontos, e nome de pawn tem os
+                // dois ("timber wolf", "Bob: o Terceiro"). Sem isto, um animal
+                // de nome composto desloca todos os campos e o cliente lê
+                // lixo — ou estoura, que foi o que aconteceu.
+                $"{p.thingIDNumber}:{Higienizar(p.LabelShort)}:{p.Position.x},{p.Position.z}:" +
                 $"{(p.drafter?.Drafted == true ? "alistado" : "livre")}:" +
-                $"{p.CurJobDef?.defName ?? "-"}");
+                $"{p.CurJobDef?.defName ?? "-"}:" +
+                // Sem isto, um cenário que quer colono pega animal: os dois
+                // aparecem aqui iguais, e animal não tem workSettings. Custou
+                // uma corrida inteira em que só `area` foi exercitada.
+                $"{(p.IsFreeColonist ? "colono" : p.RaceProps?.Animal == true ? "animal" : "outro")}");
 
         return "ok " + string.Join(" ", achados);
     }
@@ -518,6 +527,10 @@ public static class PortaDeControle
             ? new IntVec3(x, 0, z)
             : IntVec3.Invalid;
     }
+
+    /// <summary>Rótulo sem espaço e sem dois-pontos, para caber num campo.</summary>
+    static string Higienizar(string? texto) =>
+        string.IsNullOrEmpty(texto) ? "-" : texto.Replace(' ', '_').Replace(':', '-');
 
     static Pawn? Achar(int id) =>
         Find.Maps?.SelectMany(m => m.mapPawns.AllPawns).FirstOrDefault(p => p.thingIDNumber == id);

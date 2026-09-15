@@ -73,12 +73,19 @@ class Controle:
         fora = []
         for item in bruto.split():
             campos = item.split(":")
-            if len(campos) < 5:
+            # Registro malformado é pulado, não derruba a leitura: o cliente é
+            # ferramenta de diagnóstico, e ferramenta que estoura no meio de uma
+            # corrida de três minutos custa a corrida.
+            if len(campos) < 5 or "," not in campos[2]:
                 continue
-            x, z = campos[2].split(",")
+            x, z = campos[2].split(",", 1)
             p = {"id": int(campos[0]), "nome": campos[1],
                  "x": int(x), "z": int(z),
-                 "alistado": campos[3] == "alistado", "job": campos[4]}
+                 "alistado": campos[3] == "alistado", "job": campos[4],
+                 # "colono" vem do jogo, não de heurística: animal e visitante
+                 # aparecem no `pawns` como qualquer outro, e um cenário que os
+                 # confunde com colono testa o caminho errado em silêncio.
+                 "colono": len(campos) > 5 and campos[5] == "colono"}
             if alistados is None or p["alistado"] == alistados:
                 fora.append(p)
         return fora
