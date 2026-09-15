@@ -77,6 +77,36 @@ public static class RastreioDeRng
     /// </summary>
     static readonly Dictionary<long, Dictionary<long, int>> porTick = new();
 
+    /// <summary>
+    /// A <b>sequência</b> de locais de chamada de cada tick, não só a contagem.
+    ///
+    /// <para><b>Por que a contagem não bastou.</b> Numa divergência real o tick
+    /// 857 tinha só 3 sorteios de diferença no total — mas a composição era
+    /// outra:</para>
+    ///
+    /// <code>
+    /// A=20  B=12   CellRect.RandomCell &lt; Region.RandomCell
+    /// A=10  B=6    RCellFinder.RandomWanderDestFor &lt; JobGiver_Wander
+    /// A=0   B=2    PreceptComp_UnwillingToDo_Chance &lt; IdeoUtility.Notify_PawnDid…
+    /// </code>
+    ///
+    /// <para>Quatro escolhas de destino a mais de um lado, duas notificações de
+    /// ideologia a mais do outro, quase se cancelando. Isso não é "um lado fez
+    /// mais": é o mesmo tick fazendo trabalho <b>diferente</b>, e agregado por
+    /// local não dá para saber em que sorteio as duas histórias se separam.</para>
+    ///
+    /// <para>Com a sequência, dá: o comparador acha o primeiro índice em que os
+    /// dois discordam e diz quem consumiu aquele número de cada lado. É a
+    /// diferença entre "divergiram neste tick" e "divergiram no 47º sorteio
+    /// deste tick, e foi aqui".</para>
+    ///
+    /// <para>Custo: um <c>long</c> por sorteio, num anel do mesmo tamanho do
+    /// outro. Medido em ~47 sorteios por tick, são uns 56 mil longs — meio
+    /// megabyte, e nenhuma captura de pilha a mais, porque o hash do local já
+    /// é calculado para a contagem.</para>
+    /// </summary>
+    static readonly Dictionary<long, List<long>> sequenciaPorTick = new();
+
     /// <summary>Nomes já resolvidos, montados na primeira vez que cada local aparece.</summary>
     static readonly Dictionary<long, string> nomes = new();
     static readonly Stopwatch cronometro = new();
@@ -147,6 +177,19 @@ public static class RastreioDeRng
             : $"{sorteios} sorteio(s) em {cronometro.Elapsed.TotalMilliseconds:F0} ms " +
               $"({cronometro.Elapsed.TotalMilliseconds * 1000 / sorteios:F1} µs por sorteio)";
 
+    /// <summary>
+    /// A sequência de um tick, em nomes. Vazia se aquele tick saiu do anel.
+    /// </summary>
+    public static IReadOnlyList<string> SequenciaDe(long tick)
+    {
+        if (!sequenciaPorTick.TryGetValue(tick, out var sequencia)) return Array.Empty<string>();
+
+        var fora = new List<string>(sequencia.Count);
+        foreach (long local in sequencia)
+            fora.Add(nomes.TryGetValue(local, out var nome) ? nome : $"local {local:x}");
+        return fora;
+    }
+
     public static void Limpar()
     {
         ordem.Clear();
@@ -170,13 +213,22 @@ public static class RastreioDeRng
             if (!porTick.TryGetValue(tickAtual, out var contagens))
             {
                 porTick[tickAtual] = contagens = new Dictionary<long, int>();
+                sequenciaPorTick[tickAtual] = new List<long>(64);
                 ordem.Enqueue(tickAtual);
-                while (ordem.Count > TicksGuardados) porTick.Remove(ordem.Dequeue());
+                while (ordem.Count > TicksGuardados)
+                {
+                    long velho = ordem.Dequeue();
+                    porTick.Remove(velho);
+                    sequenciaPorTick.Remove(velho);
+                }
             }
 
             var local = Capturar();
             contagens.TryGetValue(local, out var n);
             contagens[local] = n + 1;
+
+            if (sequenciaPorTick.TryGetValue(tickAtual, out var sequencia)) sequencia.Add(local);
+
             sorteios++;
         }
         catch (Exception) { /* rastreio nunca pode derrubar o tick */ }
@@ -328,6 +380,48 @@ public static class RastreioDeRng
 
         // Em pedaços: o anel inteiro é grande, e o despejo acontece logo antes
         // do rollback, que já é o pico de memória do mod.
+        foreach (var pedaco in EmPedacos(texto.ToString(), 400))
+            Log.Message(pedaco);
+
+        DespejarSequencia(tickDoAborto);
+    }
+
+    /// <summary>
+    /// A sequência de sorteios de uma janela <b>estreita</b> em volta do tick.
+    ///
+    /// <para>Estreita de propósito. A agregação por local cobre o anel inteiro
+    /// porque é barata de ler; a sequência é uma linha por sorteio, e o que se
+    /// quer dela é uma coisa só: <b>em que índice as duas histórias se
+    /// separam</b>. Para isso bastam alguns ticks em volta do primeiro que
+    /// divergiu — e o comparador já sabe qual é, porque o contador por tick diz.</para>
+    ///
+    /// <para>Nasceu de um tick em que o total diferia por 3 e a composição
+    /// diferia por dezenas: quatro escolhas de destino a mais de um lado, duas
+    /// notificações de ideologia a mais do outro, quase se cancelando. Agregado
+    /// por local, isso é indistinguível de ruído; em sequência, é o índice
+    /// exato.</para>
+    /// </summary>
+    const int TicksDeSequencia = 6;
+
+    static void DespejarSequencia(long tickDoAborto)
+    {
+        var texto = new StringBuilder();
+        texto.AppendLine(
+            $"[WithFriends] sequência de sorteios — ticks " +
+            $"{tickDoAborto - TicksDeSequencia} a {tickDoAborto + TicksDeSequencia}\n" +
+            "  (um sorteio por linha, na ordem em que aconteceram; o primeiro índice\n" +
+            "   que diferir entre os dois lados é onde as histórias se separam)");
+
+        for (long tick = tickDoAborto - TicksDeSequencia; tick <= tickDoAborto + TicksDeSequencia; tick++)
+        {
+            var sequencia = SequenciaDe(tick);
+            if (sequencia.Count == 0) continue;
+
+            texto.AppendLine($"  tick {tick,6}  {sequencia.Count} sorteio(s)");
+            for (int i = 0; i < sequencia.Count; i++)
+                texto.AppendLine($"      #{i,4}  {sequencia[i]}");
+        }
+
         foreach (var pedaco in EmPedacos(texto.ToString(), 400))
             Log.Message(pedaco);
     }

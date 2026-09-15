@@ -67,6 +67,27 @@ def locais(f, alvo):
     return d
 
 
+def sequencia(f, alvo):
+    """A sequência de sorteios de um tick: lista de nomes, na ordem."""
+    dentro, tick, fora = False, None, []
+    for l in open(f, errors="replace"):
+        if "sequência de sorteios" in l:
+            if dentro:
+                break
+            dentro = True
+            continue
+        if not dentro:
+            continue
+        m = re.search(r"\btick\s+(\d+)\s+\d+ sorteio", l)
+        if m:
+            tick = int(m.group(1))
+            continue
+        m2 = re.search(r"#\s*(\d+)\s+(.*?)\s*$", l)
+        if m2 and tick == alvo:
+            fora.append(m2.group(2))
+    return fora
+
+
 def pawns(f):
     dentro, tick, d = False, None, {}
     for l in open(f, errors="replace"):
@@ -131,6 +152,25 @@ def main():
     if not dif:
         print("\nNENHUMA DIVERGÊNCIA. Os dois lados sortearam igual o tempo todo.")
         return 0
+    # A sequência, quando os dois lados a despejaram: ela responde a pergunta
+    # que a agregação por local não responde — em QUE sorteio as duas histórias
+    # se separam. Num tick cujo total difere por 3 mas a composição difere por
+    # dezenas, é a única leitura que aponta um lugar.
+    sa, sb = sequencia(a, dif[0]), sequencia(b, dif[0])
+    if sa and sb:
+        print(f"\n-- sequência do tick {dif[0]}  (A={len(sa)} sorteios, B={len(sb)})")
+        for i in range(max(len(sa), len(sb))):
+            xa = sa[i] if i < len(sa) else "(acabou)"
+            xb = sb[i] if i < len(sb) else "(acabou)"
+            if xa != xb:
+                print(f"   primeiro sorteio diferente: #{i}")
+                print(f"     A: {curto(xa, 6)}")
+                print(f"     B: {curto(xb, 6)}")
+                break
+        else:
+            print("   a sequência bate inteira — a diferença está no VALOR sorteado,")
+            print("   não em quem sorteou (entrada diferente com o mesmo caminho)")
+
     # 3 e não 1: divergir é o resultado esperado de uma reprodução, não uma
     # falha da ferramenta. Quem chama precisa distinguir "não rodou" de "rodou
     # e achou".
