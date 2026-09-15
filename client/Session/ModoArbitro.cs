@@ -216,7 +216,12 @@ public static class ModoArbitro
             // A velocidade é negociada, mas o árbitro precisa saber dela para
             // o caso de ele mesmo ter de despausar.
             (GenCommandLine.TryGetCommandLineArg("emulacaovelocidade", out string vel)
-                ? $" -emulacaovelocidade={vel}" : "");
+                ? $" -emulacaovelocidade={vel}" : "") +
+            // O árbitro na porta seguinte: duas instâncias não dividem socket, e
+            // quem dirige precisa poder falar com os dois lados.
+            (GenCommandLine.TryGetCommandLineArg("controle", out string ctl)
+                && int.TryParse(ctl, out int porta)
+                ? $" -controle={porta + 1}" : "");
 
         try
         {

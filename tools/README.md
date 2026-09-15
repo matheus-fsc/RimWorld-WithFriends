@@ -317,3 +317,45 @@ instâncias reabertas.
 - Na bancada, mudar o relógio direto não bastava: ela reescreve a velocidade a
   cada quadro para impedir que um incidente pause a corrida, e atropelava o
   comando. Quem manda pela porta muda o **alvo** dela.
+
+## Visita dirigida
+
+```
+wf dirigir --lista
+wf dirigir ir-aqui --segundos 200
+wf dirigir menus --semente 124704753
+```
+
+Sobe a visita inteira (coordenador, anfitrião, árbitro), espera ela ficar de pé,
+faz **gestos de interface no lado do anfitrião** e compara os diários no fim.
+
+Só um dos lados mexe na interface, de propósito: é a assimetria entre os dois
+que produz a divergência. Se os dois fizessem os mesmos gestos, o teste não
+testaria nada.
+
+A semente do sorteio dos gestos é registrada sempre — gesto sorteado que achou
+bug precisa poder ser refeito igual.
+
+### O que ela confirmou
+
+O conserto do "ir aqui" (`EncerrarJobViraComando`) ficou um dia sem verificação
+porque exigia duas pessoas repetindo um gesto específico. A primeira corrida
+dirigida respondeu:
+
+```
+18 × "encerrar Goto … proposto como comando"   no anfitrião
+ 0 ×                                            no árbitro
+11.163 passos comparados — NENHUMA DIVERGÊNCIA
+```
+
+18 = seis voltas × três colonos. A guarda pegou todos os gestos.
+
+### Duas coisas que a primeira corrida ensinou
+
+- **O jogo morre na subida de vez em quando** (GC do mono, logo depois de um
+  build). Esperar cinco minutos por um processo que já morreu é desperdício:
+  agora ela percebe e tenta de novo uma vez.
+- **Esperar o processo sumir é esperar demais.** O RimWorld headless às vezes
+  fica preso no `Root.Shutdown()` depois de já ter gravado tudo — medido: os
+  dois diários completos e o anfitrião de pé indefinidamente. Há prazo, e o que
+  sobrar é morto.

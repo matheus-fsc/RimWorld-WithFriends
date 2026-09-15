@@ -42,9 +42,11 @@ wf — linha de comando do With Friends
       --sangue                     rastreia a decisão de largar sangue
       --caminho                    rastreia as decisões do pathfinding
       --velocidade V               Normal|Fast|Superfast|Ultrafast (padrão Fast)
+      --controle P                 porta de controle: anfitrião em P, árbitro em P+1
   wf comparar                      compara os dois diários mais novos
   wf erros [--todos]               agrupa erros e avisos; destaca os de um lado só
   wf controle [--porta P] [cmd]    dirige um jogo aberto com -controle=P
+  wf dirigir CENARIO               visita inteira com gestos de interface, e compara
   wf auditar                       audita o assembly do jogo (alcance + MP)
   wf saves [p1|p2]                 lista os saves de cada instância
   wf diarios                       lista os diários mais novos de cada lado
@@ -168,10 +170,11 @@ cmd_rodar() {
 }
 
 cmd_emular() {
-    local visivel=0 sangue=0 caminho=0 roteiro="" velocidade="" args=() pegar_roteiro=0 pegar_vel=0
+    local visivel=0 sangue=0 caminho=0 roteiro="" velocidade="" controle="" args=() pegar_roteiro=0 pegar_vel=0 pegar_ctl=0
     for a in "$@"; do
         if [[ $pegar_roteiro -eq 1 ]]; then roteiro="$a"; pegar_roteiro=0; continue; fi
         if [[ $pegar_vel -eq 1 ]]; then velocidade="$a"; pegar_vel=0; continue; fi
+        if [[ $pegar_ctl -eq 1 ]]; then controle="$a"; pegar_ctl=0; continue; fi
         case "$a" in
             --visivel)   visivel=1 ;;
             --sangue)    sangue=1 ;;
@@ -180,6 +183,8 @@ cmd_emular() {
             --roteiro=*) roteiro="${a#*=}" ;;
             --velocidade)   pegar_vel=1 ;;
             --velocidade=*) velocidade="${a#*=}" ;;
+            --controle)     pegar_ctl=1 ;;
+            --controle=*)   controle="${a#*=}" ;;
             *)           args+=("$a") ;;
         esac
     done
@@ -200,6 +205,7 @@ cmd_emular() {
     [[ $sangue -eq 1 ]] && extra="$extra -rastrearsangue"
     [[ $caminho -eq 1 ]] && extra="$extra -rastrearcaminho"
     [[ -n "$velocidade" ]] && extra="$extra -emulacaovelocidade=$velocidade"
+    [[ -n "$controle" ]] && extra="$extra -controle=$controle"
     if [[ $visivel -eq 1 ]]; then
         semtela=""
         # Unity abre em tela cheia por padrão, e duas instâncias em tela cheia
@@ -226,6 +232,8 @@ cmd_comparar() { exec python3 "$RAIZ/tools/comparar-diarios.py"; }
 cmd_erros() { exec python3 "$RAIZ/tools/erros.py" "$@"; }
 
 cmd_controle() { exec python3 "$RAIZ/tools/controle.py" "$@"; }
+
+cmd_dirigir() { exec python3 "$RAIZ/tools/dirigir.py" "$@"; }
 
 cmd_auditar() {
     local dll="$RAIZ/referencia/jogo/steam-1.6.4871/Managed/Assembly-CSharp.dll"
@@ -274,6 +282,7 @@ case "${1:-}" in
     comparar) shift; cmd_comparar "$@" ;;
     erros)    shift; cmd_erros "$@" ;;
     controle) shift; cmd_controle "$@" ;;
+    dirigir)  shift; cmd_dirigir "$@" ;;
     auditar)  shift; cmd_auditar "$@" ;;
     saves)    shift; cmd_saves "$@" ;;
     diarios)  shift; cmd_diarios "$@" ;;
