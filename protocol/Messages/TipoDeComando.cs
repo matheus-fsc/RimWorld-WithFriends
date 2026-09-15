@@ -131,6 +131,25 @@ public enum TipoDeComando : byte
     /// </code>
     /// </summary>
     EncerrarJob = 10,
+
+    /// <summary>
+    /// Um ajuste de pawn: prioridade de trabalho, restrição de área, mestre de
+    /// animal, seguir alistado.
+    ///
+    /// <para><b>Por que um tipo e não quatro.</b> Mesma razão de
+    /// <see cref="Alternar"/>, um degrau acima. Aqueles são todos
+    /// <c>bool</c>; estes têm formas diferentes — um inteiro com um def
+    /// (prioridade), uma referência (área, mestre), um booleano (seguir). Um
+    /// payload de <c>(pawn, chave, número, texto)</c> cobre os quatro, e quem
+    /// sabe o que a chave significa é o registro em <c>AjustesDePawn</c>.</para>
+    ///
+    /// <para>Vieram do mapa de decisões do Multiplayer (<c>wf decisoes</c>), da
+    /// família <b>pawn</b> — a que uma visita de verdade exercita. E são
+    /// decisão de simulação, não enfeite: prioridade de trabalho muda o que o
+    /// colono faz no tick seguinte, que é exatamente a classe de divergência
+    /// que custou o dia 14.</para>
+    /// </summary>
+    AjusteDePawn = 11,
 }
 
 /// <summary>

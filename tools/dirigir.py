@@ -110,9 +110,45 @@ def cenario_menus(c, log):
         time.sleep(0.4)
 
 
+def cenario_ajustes(c, log):
+    """
+    Prioridade de trabalho, área e mestre — a família `pawn` do mapa de decisões.
+
+    São decisão de simulação, não enfeite: prioridade muda o que o colono faz no
+    tick seguinte, que é exatamente a divergência que custou o dia 14 (um lado
+    escolhendo Clean, o outro BuildRoof).
+    """
+    colonos = [p for p in c.pawns() if not p["alistado"]][:4] or c.pawns()[:4]
+    if not colonos:
+        log("nenhum pawn — nada a ajustar")
+        return
+
+    trabalhos = ["Cleaning", "Hauling", "Construction", "Growing", "Cooking"]
+
+    for volta in range(8):
+        for p in colonos:
+            trabalho = random.choice(trabalhos)
+            prioridade = random.randint(1, 4)
+            try:
+                c.cmd(f"ajuste {p['id']} prioridade {prioridade} {trabalho}")
+            except RuntimeError as e:
+                log(f"{p['nome']} {trabalho}: {e}")
+
+        # Área: alternar entre "sem restrição" e o que existir no mapa.
+        for p in colonos[:2]:
+            try:
+                c.cmd(f"ajuste {p['id']} area -1")
+            except RuntimeError:
+                pass
+
+        log(f"volta {volta + 1}: {len(colonos)} colono(s) reconfigurados")
+        time.sleep(1.5)
+
+
 CENARIOS = {
     "ir-aqui": cenario_ir_aqui,
     "menus": cenario_menus,
+    "ajustes": cenario_ajustes,
 }
 
 

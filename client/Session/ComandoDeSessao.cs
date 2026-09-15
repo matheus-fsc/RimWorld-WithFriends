@@ -192,6 +192,9 @@ public static class ComandoDeSessao
     /// está em <c>mapPawns</c>, e proibir um item é tão comando quanto mandar um
     /// colono andar.
     /// </summary>
+    /// <summary>O mesmo, já como pawn. Atalho para os registros de ajuste.</summary>
+    public static Pawn? EncontrarPawn(int thingIDNumber) => Encontrar(thingIDNumber);
+
     public static Thing? EncontrarCoisa(int thingIDNumber)
     {
         foreach (var mapa in Find.Maps)
@@ -384,6 +387,16 @@ public static class ComandoDeSessao
 
                 pawn.jobs.TryTakeOrderedJob(job, tag, enfileirar);
                 return $"{pawn.LabelShort} → {job.def.defName}";
+            }
+
+            case TipoDeComando.AjusteDePawn:
+            {
+                using var ms = new MemoryStream(payload, writable: false);
+                using var r = new BinaryReader(ms);
+                r.ReadByte();
+
+                return AjustesDePawn.Aplicar(
+                    r.ReadInt32(), r.ReadString(), r.ReadInt32(), r.ReadString());
             }
 
             case TipoDeComando.EncerrarJob:

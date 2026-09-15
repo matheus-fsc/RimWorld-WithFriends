@@ -114,6 +114,31 @@ designar. Coerente com §4 (designar fica com o visitante porque ele precisa erg
 barricada), mas estoque é mais "arrumação da casa" que "defesa" — vale decidir de
 propósito, não por omissão.
 
+## Ajustes de pawn (feito)
+
+Vieram do mapa de decisões (`wf decisoes`), família **pawn** — a que uma visita
+exercita de verdade. Um tipo de comando, `AjusteDePawn`, com registro de chaves:
+
+| chave | membro do jogo | por que importa |
+|---|---|---|
+| `prioridade` | `Pawn_WorkSettings.SetPriority` | muda o que o colono faz no tick seguinte |
+| `area` | `Pawn_PlayerSettings.AreaRestrictionInPawnCurrentMap` | decide onde ele pode ir, e portanto que trabalho pega |
+| `mestre` | `Pawn_PlayerSettings.Master` | a quem o animal obedece |
+| `seguirAlistado` | `PawnColumnWorker_FollowDrafted.SetValue` | campo público, sem setter — remendo no chamador |
+| `seguirTrabalho` | `PawnColumnWorker_FollowFieldwork.SetValue` | idem |
+
+Mesma ideia de `Alternar` um degrau acima: lá é tudo `bool`; aqui as formas
+variam — inteiro com um def, referência, booleano. O payload
+`(pawn, chave, número, texto)` cobre as cinco.
+
+Os dois últimos são remendo no **chamador**, contra a ADR 0015, porque não há
+fonte: `followDrafted` e `followFieldwork` são campos públicos, e campo não tem
+setter. O Multiplayer registra os mesmos dois chamadores pelo mesmo motivo.
+
+**Por que estes primeiro.** Não é enfeite: a divergência que custou o dia 14 foi
+uma colona escolhendo `Clean` de um lado e `BuildRoof` do outro. Prioridade de
+trabalho e restrição de área são exatamente as entradas dessa escolha.
+
 **Falta ainda nesta frente:** zonas de crescimento (`Zone_Growing.PlantDefToGrow`),
 apagar zona (`Zone.Delete`), áreas (`Area.Invert`, `Area.Delete`,
 `AreaManager.TryMakeNewAllowed`) e a restrição de área do pawn

@@ -180,6 +180,7 @@ public static class PortaDeControle
             case "ajuda":
                 return "ok estado | pawns [texto] | alistar ID 0|1 | ir ID x,z | " +
                        "incidente DEF [pontos] | velocidade NOME | despejar | sair " +
+                       "| ajuste ID chave numero [texto] " +
                        "|| interface: selecionar ID… | menu x,z | irarrastando x,z | olhar x,z";
 
             case "estado":
@@ -212,6 +213,9 @@ public static class PortaDeControle
             case "olhar":
                 return Olhar(partes);
 
+            case "ajuste":
+                return Ajuste(partes);
+
             case "despejar":
                 RastreioDePawns.Despejar();
                 return "ok rastreio de pawns despejado no diário";
@@ -224,6 +228,53 @@ public static class PortaDeControle
 
             default:
                 return $"erro comando desconhecido: {comando} (tente 'ajuda')";
+        }
+    }
+
+    /// <summary>
+    /// Um ajuste de pawn pela mesma porta do clique — prioridade de trabalho,
+    /// área, mestre, seguir. Ver <see cref="AjustesDePawn"/>.
+    ///
+    /// <para>Existe para que a visita dirigida consiga exercitar esses
+    /// comandos: sem um gesto que os dispare, eles ficariam escritos e nunca
+    /// medidos.</para>
+    /// </summary>
+    static string Ajuste(string[] partes)
+    {
+        if (partes.Length < 4) return "erro uso: ajuste ID chave numero [texto]";
+        if (!int.TryParse(partes[1], out int id)) return "erro id inválido";
+        if (!int.TryParse(partes[3], out int numero)) return "erro número inválido";
+
+        var pawn = Achar(id);
+        if (pawn == null) return $"erro pawn {id} não encontrado";
+
+        string chave = partes[2];
+        string texto = partes.Length > 4 ? partes[4] : "";
+
+        // Pela porta do jogador: se houver visita, isto vira comando; fora
+        // dela, acontece local. É o mesmo caminho do clique, de propósito.
+        switch (chave)
+        {
+            case "prioridade":
+                var tipo = DefDatabase<WorkTypeDef>.GetNamedSilentFail(texto);
+                if (tipo == null) return $"erro tipo de trabalho desconhecido: {texto}";
+                if (pawn.workSettings == null) return $"erro {pawn.LabelShort} não trabalha";
+                pawn.workSettings.SetPriority(tipo, numero);
+                return $"ok {pawn.LabelShort}: {texto} → prioridade {numero}";
+
+            case "area":
+                if (pawn.playerSettings == null) return $"erro {pawn.LabelShort} sem playerSettings";
+                pawn.playerSettings.AreaRestrictionInPawnCurrentMap =
+                    numero < 0 ? null : pawn.Map?.areaManager?.AllAreas.FirstOrDefault(a => a.ID == numero);
+                return $"ok {pawn.LabelShort}: área → {numero}";
+
+            case "mestre":
+                if (pawn.playerSettings == null) return $"erro {pawn.LabelShort} sem playerSettings";
+                pawn.playerSettings.Master = numero < 0 ? null : Achar(numero);
+                return $"ok {pawn.LabelShort}: mestre → {numero}";
+
+            default:
+                return $"erro ajuste desconhecido: {chave} (prioridade | area | mestre)";
         }
     }
 

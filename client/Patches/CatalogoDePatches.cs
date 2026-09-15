@@ -260,6 +260,27 @@ public static class CatalogoDePatches
         },
         new AlvoDePatch
         {
+            Tipo = typeof(RimWorld.Pawn_WorkSettings),
+            Membro = nameof(RimWorld.Pawn_WorkSettings.SetPriority),
+            Recurso = "prioridade de trabalho dentro de sessão",
+            Motivo = "muda o que o colono faz no tick seguinte — a divergência do dia 14 foi Clean contra BuildRoof",
+        },
+        new AlvoDePatch
+        {
+            Tipo = typeof(RimWorld.Pawn_PlayerSettings),
+            Membro = nameof(RimWorld.Pawn_PlayerSettings.AreaRestrictionInPawnCurrentMap),
+            Recurso = "restrição de área dentro de sessão",
+            Motivo = "decide para onde o pawn pode ir, e portanto que trabalho ele consegue pegar",
+        },
+        new AlvoDePatch
+        {
+            Tipo = typeof(RimWorld.Pawn_PlayerSettings),
+            Membro = nameof(RimWorld.Pawn_PlayerSettings.Master),
+            Recurso = "mestre de animal dentro de sessão",
+            Motivo = "decide a quem o animal obedece",
+        },
+        new AlvoDePatch
+        {
             Tipo = typeof(Verse.AI.Pawn_JobTracker),
             Membro = nameof(Verse.AI.Pawn_JobTracker.EndCurrentJob),
             Recurso = "encerrar job dentro de sessão",
