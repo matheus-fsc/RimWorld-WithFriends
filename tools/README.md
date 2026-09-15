@@ -386,3 +386,41 @@ dirigida respondeu:
   fica preso no `Root.Shutdown()` depois de já ter gravado tudo — medido: os
   dois diários completos e o anfitrião de pé indefinidamente. Há prazo, e o que
   sobrar é morto.
+
+## O mapa das decisões
+
+```
+wf decisoes            # o que falta, por assunto
+wf decisoes --nossos   # o que já é comando aqui
+wf decisoes --todos    # a lista inteira, item a item
+```
+
+O Zetrith sustenta ~360 registros de sincronia num mod que funciona. Sob
+lockstep, essa lista responde "o que precisa ser determinístico". Mas ela
+responde outra pergunta também — e é a que interessa a uma arquitetura de
+decisão autoritativa: **onde a decisão do jogador entra na simulação**.
+
+É a mesma referência lida pela outra metade. Cada registro é um lugar em que um
+clique vira mudança de estado, ou seja, exatamente o que precisaria virar
+comando.
+
+Estado em 14/09/2026:
+
+| | |
+|---|---|
+| registros no Multiplayer | 360 |
+| já é comando aqui | 6 |
+| fora de escopo da visita | 95, em 8 motivos |
+| falta | 259, sendo 31 de pawn e 104 de comp |
+
+A lista de "fora de escopo" leva o motivo junto, e os motivos citam a seção do
+desenho: pesquisa, ideologia, caravana, comércio, missão, facção, política e
+biotecnologia não acontecem numa visita de minutos. Lista de silêncio sem motivo
+vira lugar onde trabalho se esconde.
+
+A família **pawn** (31) é a que uma visita de verdade exercita — prioridade de
+trabalho, restrição de área, seguir alistado, treinar animal. É por onde começar
+em qualquer um dos dois desenhos.
+
+Reusar a lista é reusar conhecimento de domínio, não código: cada linha dela foi
+paga com o bug de alguém.

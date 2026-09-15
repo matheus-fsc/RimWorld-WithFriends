@@ -56,6 +56,7 @@ wf — linha de comando do With Friends
   wf erros [--todos]               agrupa erros e avisos; destaca os de um lado só
   wf controle [--porta P] [cmd]    dirige um jogo aberto com -controle=P
   wf dirigir CENARIO               visita inteira com gestos de interface, e compara
+  wf decisoes [--todos|--nossos]   mapa das decisões de jogador, extraído do MP
   wf auditar                       audita o assembly do jogo (alcance + MP)
   wf saves [p1|p2]                 lista os saves de cada instância
   wf diarios                       lista os diários mais novos de cada lado
@@ -244,6 +245,8 @@ cmd_controle() { exec python3 "$RAIZ/tools/controle.py" "$@"; }
 
 cmd_dirigir() { exec python3 "$RAIZ/tools/dirigir.py" "$@"; }
 
+cmd_decisoes() { exec python3 "$RAIZ/tools/decisoes.py" "$@"; }
+
 cmd_auditar() {
     local dll="$RAIZ/referencia/jogo/steam-1.6.4871/Managed/Assembly-CSharp.dll"
     local mp="$RAIZ/referencia/repos/Multiplayer/Source"
@@ -292,6 +295,7 @@ case "${1:-}" in
     erros)    shift; cmd_erros "$@" ;;
     controle) shift; cmd_controle "$@" ;;
     dirigir)  shift; cmd_dirigir "$@" ;;
+    decisoes) shift; cmd_decisoes "$@" ;;
     auditar)  shift; cmd_auditar "$@" ;;
     saves)    shift; cmd_saves "$@" ;;
     diarios)  shift; cmd_diarios "$@" ;;
