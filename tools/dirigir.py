@@ -468,7 +468,37 @@ def lado_vivo(porta):
         return False
 
 
-def esperar_visita(porta, prazo, log, processo=None):
+def gestos_de_aquecimento(porta, log, feitos=[0]):
+    """
+    Mexer na interface do anfitrião ENQUANTO ele joga sozinho.
+
+    **Por que isto faltava.** O aquecimento sozinho não reproduziu nenhuma das
+    duas causas testadas, e o motivo é a bancada ser cega: com
+    `-batchmode -nographics` o anfitrião nunca abre uma tela. Mas a família que
+    perseguimos não é "estado de processo" e sim, quase toda ela, **estado de
+    processo criado pela interface** — o cache de stat que a aba de saúde enche,
+    os pensamentos que o painel recalcula, a posição de desenho que o quadro
+    interpola.
+
+    Tempo de jogo o aquecimento já dava. O que faltava era uso de interface.
+    """
+    try:
+        with Controle(porta, tempo=4.0) as c:
+            pawns = c.pawns()
+            if not pawns:
+                return
+            alvo = random.choice(pawns)
+            c.cmd("selecionar " + " ".join(str(p["id"]) for p in pawns[:12]))
+            c.cmd(f"olhar {alvo['x']},{alvo['z']}")
+            c.cmd(f"menu {alvo['x']},{alvo['z']}")
+            feitos[0] += 1
+            if feitos[0] % 10 == 1:
+                log(f"aquecendo a interface do anfitrião ({feitos[0]} gesto(s))")
+    except (OSError, RuntimeError):
+        pass   # ainda carregando, ou já entrou na visita
+
+
+def esperar_visita(porta, prazo, log, processo=None, aquecendo=False):
     """
     Espera a porta responder e a sessão chegar em Simulando.
 
@@ -533,6 +563,11 @@ def esperar_visita(porta, prazo, log, processo=None):
                     return "desistiu"
                 if guerra_de_identidade():
                     return "duplicada"
+
+                # Enquanto o anfitrião joga sozinho, mexer na interface dele: é
+                # isso que enche os caches que só um lado tem.
+                if aquecendo and estado.get("sessao") == "Fora":
+                    gestos_de_aquecimento(porta, log)
 
                 if not avisou:
                     log(f"conectado; esperando a visita (sessão={estado.get('sessao')})")
@@ -689,7 +724,8 @@ def main():
         # O prazo cresce com o aquecimento: enquanto ele corre, o anfitrião fica
         # "Fora" de propósito, e o prazo de sempre o mataria no meio.
         prazo = 300 + (args.aquecimento // 4 if args.aquecimento else 0)
-        resultado = esperar_visita(args.porta, prazo=prazo, log=log, processo=emulacao)
+        resultado = esperar_visita(args.porta, prazo=prazo, log=log, processo=emulacao,
+                                   aquecendo=bool(args.aquecimento))
         if resultado == "ok":
             break
 

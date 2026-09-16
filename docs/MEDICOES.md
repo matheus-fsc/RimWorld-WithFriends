@@ -653,3 +653,50 @@ um lado e **342.376** do outro. A diferença é enorme e **não é problema** �
 os geradores separados (`RngDeSessao` troca o estado em volta de cada tick), e o
 número só confirma o quanto a interface consome. Se um dia esses dois números
 precisarem bater, é porque a separação quebrou.
+
+
+## O aquecimento da bancada não reproduz a família da ADR 0020 (16/09/2026)
+
+**Três experimentos, três negativos.** Vale mais escrito do que esquecido.
+
+Cinco consertos seguidos vieram da mesma família — estado de processo do
+anfitrião, que não está no save — e nenhum deles a emulação tinha visto. O
+`--aquecimento` foi escrito para fechar esse buraco: o anfitrião joga sozinho
+alguns milhares de ticks antes de convidar, como uma pessoa faz, e o árbitro
+chega do zero.
+
+O teste de um arnês novo não é "rodou limpo". É **desligar um conserto conhecido
+e conferir que ele acusa**. Foi o que se fez, com o save `torres` do autor:
+
+| # | conserto desligado | aquecimento | gestos de interface | resultado |
+|---|---|---|---|---|
+| 1 | isolação de `TurretTop` | 2000 ticks | não | limpo, 3982 ticks |
+| 2 | zeramento no anfitrião | 2000 ticks | não | limpo, 3980 ticks |
+| 3 | zeramento no anfitrião | 2000 ticks | 21+ | limpo, 3980 ticks |
+
+Os interruptores foram verificados nos dois lados em cada corrida — "60 métodos
+isolados" em vez de 61 no primeiro, zero ocorrências de "início da visita no
+anfitrião" nos outros dois. Não foram falsos negativos por engano de montagem.
+
+### O que isso ensina
+
+**A bancada é cega, e a família nasce da interface.** Com
+`-batchmode -nographics` o anfitrião nunca desenha uma aba de saúde, um painel de
+inspeção, uma tabela de pawns — e são eles que consultam stats fora do tick,
+recalculam pensamentos e interpolam posição de desenho. O aquecimento dá **tempo
+de jogo**; o que falta é **uso de interface**, e a porta de controle não substitui
+isso: ela chama provedores de menu e move a câmera, mas nenhuma aba é desenhada
+porque `OnGUI` não roda.
+
+Também obriga a rebaixar uma atribuição: o conserto de `TurretTop` é
+**preventivo**, não provado. O mecanismo é real — o estado não está no save —,
+mas a contagem assimétrica de sorteios que o apontou (292 contra 283) veio de uma
+sessão que já tinha divergido, e pode ter sido consequência.
+
+### O que fica
+
+O aquecimento e os gestos continuam no arnês: custam pouco, aproximam a bancada
+do jogo que se joga, e podem pegar outros membros da família. Mas ficam
+**anotados como não provados para esta classe**, e a instrumentação de uma
+partida de gente (`tools/dois-jogos.sh --servidor --controle 25600`) segue sendo
+o único detector que a alcança.
