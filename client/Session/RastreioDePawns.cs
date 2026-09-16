@@ -82,12 +82,40 @@ public static class RastreioDePawns
         // não mede nada.
         bool eraInterface = NaInterface.Tickando;
         NaInterface.Tickando = true;
+
+        // **Quanto o instrumento custa, medido em vez de suposto.**
+        //
+        // Este amostrador roda por pawn, por tick, e desde que passou a gravar
+        // `vel` (que chama `GetStatValue`) e `desenho` (que chama `DrawPos`)
+        // ficou bem mais caro. Numa sessão de gente com explosões, o laço de
+        // tick começou a gastar o orçamento inteiro do quadro — e o suspeito
+        // óbvio é quem acabou de engordar.
+        //
+        // Suspeitar não basta: o número sai daqui.
+        var relogio = System.Diagnostics.Stopwatch.StartNew();
         try { AmostrarDeVerdade(tickDeSessao, mapa); }
-        finally { NaInterface.Tickando = eraInterface; }
+        finally
+        {
+            NaInterface.Tickando = eraInterface;
+            relogio.Stop();
+
+            microsAcumulados += relogio.Elapsed.TotalMilliseconds * 1000.0;
+            if (++ticksMedidos >= 500)
+            {
+                Log.Message(
+                    $"[WithFriends/rastreio] amostragem de pawns: " +
+                    $"{microsAcumulados / ticksMedidos:F0} µs por tick " +
+                    $"({microsAcumulados / 1000.0:F0} ms em {ticksMedidos} ticks)");
+                ticksMedidos = 0;
+                microsAcumulados = 0.0;
+            }
+        }
     }
 
     static void AmostrarDeVerdade(long tickDeSessao, Map mapa)
     {
+        tickAtual = tickDeSessao;
+
         var linhas = new List<string> { LinhaDoMapa(mapa) };
 
         // Ordem por id: a ordem das listas do jogo não é contrato.
@@ -311,10 +339,37 @@ public static class RastreioDePawns
             $"precisao {(clima?.CurWeatherAccuracyMultiplier ?? 0f).ToString("R", System.Globalization.CultureInfo.InvariantCulture)}";
     }
 
+    /// <summary>
+    /// **Os campos caros só de quatro em quatro ticks.**
+    ///
+    /// <para>Medido nesta bancada: a amostragem inteira custava <b>3,1 ms por
+    /// tick</b> com 136 pawns — e o orçamento de um quadro é da ordem de 16 ms.
+    /// Numa sessão de gente com explosões, o laço passou a avançar 1 a 3 passos
+    /// por quadro e a visita pareceu travada. O instrumento virou o problema que
+    /// ele existia para medir.</para>
+    ///
+    /// <para>O que custa é o derivado: <c>GetStatValue</c> percorre as partes do
+    /// stat, <c>DrawPos</c> recalcula a interpolação. O que é barato — posição,
+    /// job, sangue, hediffs — continua todo tick, porque foi ele que achou a
+    /// maioria das causas.</para>
+    ///
+    /// <para>Quatro ticks não perdem nada do que se caça aqui: quando
+    /// velocidade ou posição de desenho divergem, elas ficam divergentes por
+    /// centenas de ticks. A caçada do céu e a do tranco teriam sido idênticas
+    /// com esta amostragem.</para>
+    /// </summary>
+    static bool CamposCaros(long tick) => tick % 4 == 0;
+
+    static long tickAtual;
+
+    static string Tpm(Pawn pawn) =>
+        CamposCaros(tickAtual) ? $"{pawn.TicksPerMoveCardinal,4}" : "   -";
+
     /// <summary>O stat de velocidade, com todos os dígitos: é uma casa decimal
     /// que acusa, não a terceira.</summary>
     static string Velocidade(Pawn pawn)
     {
+        if (!CamposCaros(tickAtual)) return "-";
         try
         {
             return pawn.GetStatValue(StatDefOf.MoveSpeed)
@@ -329,6 +384,7 @@ public static class RastreioDePawns
     /// </summary>
     static string Capacidade(Pawn pawn)
     {
+        if (!CamposCaros(tickAtual)) return "-";
         try
         {
             return pawn.health?.capacities?.GetLevel(PawnCapacityDefOf.Moving)
@@ -340,6 +396,7 @@ public static class RastreioDePawns
     /// <summary>A posição de desenho — a que vira origem de tiro.</summary>
     static string Desenho(Pawn pawn)
     {
+        if (!CamposCaros(tickAtual)) return "       -,       -";
         try
         {
             var p = pawn.Drawer?.DrawPos ?? default;
@@ -357,6 +414,7 @@ public static class RastreioDePawns
 
     static string Tranco(Pawn pawn)
     {
+        if (!CamposCaros(tickAtual)) return "     -,     -";
         try
         {
             if (pawn.Drawer == null || CampoDoTranco?.GetValue(pawn.Drawer) is not JitterHandler j)
@@ -366,6 +424,9 @@ public static class RastreioDePawns
         }
         catch (Exception) { return "     -,     -"; }
     }
+
+    static int ticksMedidos;
+    static double microsAcumulados;
 
     static string Linha(Pawn pawn)
     {
@@ -392,7 +453,7 @@ public static class RastreioDePawns
             // Sem os três, "o custo diferiu" não distingue stat cacheado de
             // capacidade recalculada em momento diferente — e são conserto em
             // lugares opostos.
-            $"vel {Velocidade(pawn)} mover {Capacidade(pawn)} tpm {pawn.TicksPerMoveCardinal,4}  " +
+            $"vel {Velocidade(pawn)} mover {Capacidade(pawn)} tpm {Tpm(pawn)}  " +
             // **A posição de DESENHO, e o tranco visual dentro dela.**
             //
             // `Verb_LaunchProjectile.TryCastShot` usa `caster.DrawPos` como
