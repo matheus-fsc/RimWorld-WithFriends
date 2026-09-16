@@ -53,7 +53,75 @@ A visita ainda **diverge em partidas de verdade**. Cada sessão jogada por gente
 revela em média uma causa nova, e a maioria delas não aparece na bancada. Ver
 [[Determinismo]] para o porquê e para a lista do que já foi achado.
 
-Estimar prazo para "jogável" seria chute: o que existe é uma taxa de descoberta,
-não uma lista fechada. O que dá para dizer com números é que as causas estão
-ficando mais raras e mais tardias: as primeiras derrubavam a visita no tick 200,
-as últimas no tick 1000 e além.
+## Estimativa para funcionar de verdade
+
+Estimativa sem premissa é chute, então as premissas vão junto.
+
+**O que conta como "funcionar de verdade"**: uma visita de dez a quinze minutos,
+com combate, sobrevivendo sem divergência, com as decisões de jogador que uma
+visita exercita já virando comando. Não é "tudo do jogo sincronizado": é o
+encontro inteiro sem o jogo desfazer o que alguém acabou de fazer.
+
+### Frente 1: determinismo (a incerta)
+
+Não há lista fechada. O que há é uma taxa, e ela está caindo. Medido em
+16/09/2026, o tick em que a visita divergiu, sessão após sessão, conforme as
+causas foram sendo consertadas:
+
+```
+216  224  200  512  496  421  1000  1160  1744
+```
+
+A tendência é clara e vale mais que a média: as primeiras divergências matavam a
+visita em três segundos de jogo, as últimas em quase trinta. Treze causas achadas
+em um dia de sessões, e as quatro últimas vieram de partidas de gente, não da
+bancada.
+
+**Estimativa**: entre 5 e 15 causas restantes nessa família, com intervalo largo
+de propósito. A base é fraca (uma amostra de um dia), e o fator que mais pesa é
+que as causas restantes são cada vez mais raras, o que significa sessões mais
+longas para encontrá-las. Em ritmo de algumas sessões jogadas por semana, isso é
+**um a três meses**.
+
+O que encurtaria: um arnês que enxergue interface. Hoje a emulação roda sem
+tela, e isso está medido e registrado como limite conhecido (ver [[Bancada]]).
+
+### Frente 2: comandos (a contável)
+
+Esta dá para contar, e é a parte confortável da estimativa.
+
+| | Quantos | Custo por item |
+|---|---|---|
+| Já viram comando | 24 | feito |
+| Intercepção direta (`método`) | 70 | baixo, uma a uma |
+| Campo público em lambda de botão | 23 | médio, a máquina já existe |
+| Botão cuja ação é lambda (`closure`) | 96 | médio, a máquina já existe |
+| Tipo não encontrado no assembly | 52 | a investigar, provavelmente DLC |
+
+A máquina que resolve os dois casos caros (vigiar o campo em volta da chamada de
+interface) **já está escrita e funcionando** com três campos. Depois dela, cada
+item vira uma entrada num registro, não um problema novo.
+
+Mas nem todos os 241 são necessários para "funcionar de verdade". A visita
+exercita ordem, combate, saúde, zona e bancada de trabalho. Estimando por essas
+famílias: **60 a 80 itens** cobrem o que um encontro toca de verdade, e são o
+alvo real. Em ritmo de uma família por sessão de trabalho, **três a seis semanas**.
+
+### A conta junta
+
+As duas frentes correm em paralelo, e a primeira domina. Sob as premissas acima:
+
+> **Dois a quatro meses** para uma visita de dez minutos com combate sobreviver
+> de forma confiável, mantendo o ritmo atual de algumas sessões jogadas por
+> semana.
+
+O que mais pode mudar esse número, para cima ou para baixo, é a **frente 1**: se
+as próximas três sessões vierem limpas, o intervalo cai pela metade; se
+aparecerem duas causas novas de famílias ainda não vistas, dobra.
+
+### O que já é certo
+
+Mesmo no pior caso, duas coisas não voltam atrás: a visita **nunca custa a
+colônia** (o checkpoint pré-sessão é anterior a tudo), e cada causa achada fica
+registrada com a medição que a provou, em [[Determinismo]] e em
+`docs/MEDICOES.md`, inclusive as hipóteses que a medição derrubou.

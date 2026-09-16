@@ -21,6 +21,44 @@ flowchart LR
     S -->|"fim"| B
 ```
 
+## Onde está, em uma tela
+
+| | |
+|---|---|
+| **Funciona** | duas instâncias simulam o mesmo mapa em lockstep, trocam comandos, detectam divergência e voltam a um ponto de junção em vez de abortar |
+| **Não funciona** | a visita ainda diverge em partidas de verdade, cada vez mais tarde |
+| **Testes** | 153 passando, 88 pontos de acoplamento catalogados e verificados na subida |
+| **Regressão** | 3.992 ticks sem divergência na bancada |
+
+**Mapeamento das decisões de jogador** (base: os 360 registros de sincronia do
+Multiplayer):
+
+```mermaid
+pie showData
+    title O que precisa virar comando
+    "Fora de escopo" : 95
+    "Já é comando" : 24
+    "Falta" : 241
+```
+
+Dos 241 que faltam, 119 dependem de identificar a ação de um botão, e a máquina
+que resolve isso já está escrita.
+
+**Divergência, sessão após sessão, conforme as causas foram consertadas** (tick
+em que a visita quebrou, medido em 16/09/2026):
+
+```
+216  224  200  512  496  421  1000  1160  1744
+```
+
+As primeiras matavam a visita em três segundos de jogo. As últimas, em quase
+trinta.
+
+**Estimativa para uma visita de dez minutos com combate sobreviver de forma
+confiável: dois a quatro meses**, no ritmo atual de algumas sessões jogadas por
+semana. As premissas, as duas frentes e o que faria esse número subir ou descer
+estão em [[Estado atual]].
+
 ## Por onde começar
 
 | Página | O que responde |
