@@ -131,3 +131,47 @@ public static class InclinacaoForaDaSimulacao
         __result = Vector3.zero;
     }
 }
+
+
+/// <summary>
+/// O desvio que impede dois pawns de se sobreporem na tela — também é desenho,
+/// e também entra na origem do tiro.
+///
+/// <para><b>Como apareceu.</b> Depois de zerar a inclinação, a mesma corrida
+/// voltou com a diferença menor e no mesmo lugar:</para>
+///
+/// <code>
+/// antes do conserto da inclinação:  A 112.500,93.500   B 112.587,93.451  (0,087)
+/// depois:                           A 100.560,96.553   B 100.520,96.517  (0,040)
+/// </code>
+///
+/// <para>Sobrou o outro termo do mesmo cálculo.
+/// <c>PawnCollisionPosOffsetFor</c> desloca o pawn um pouco para o lado quando
+/// há mais de um na mesma célula, para que se vejam os dois. Para saber <b>para
+/// que lado e quanto</b>, ele conta quem está ali percorrendo
+/// <c>GetThingList(célula)</c> — e a ordem dessa lista é a ordem em que as
+/// coisas entraram na célula, que é história de processo, não estado do
+/// save.</para>
+///
+/// <para>Dois lados com a mesma simulação e listas em ordens diferentes dão
+/// índices diferentes, desvios diferentes, e balas nascendo em pontos
+/// diferentes.</para>
+///
+/// <para><b>O guarda.</b> Dentro do tick, desvio zero. O que sobra em
+/// <c>TweenedPosRoot</c> é só a interpolação entre a célula atual e a próxima —
+/// que é estado de caminho, e portanto de simulação. Fora do tick nada muda: na
+/// tela os pawns continuam se desencostando.</para>
+/// </summary>
+[HarmonyPatch(typeof(PawnCollisionTweenerUtility),
+    nameof(PawnCollisionTweenerUtility.PawnCollisionPosOffsetFor))]
+public static class DesvioDeColisaoForaDaSimulacao
+{
+    [HarmonyPostfix]
+    public static void Depois(ref Vector3 __result)
+    {
+        if (!NaInterface.Tickando) return;
+
+        GuardasDeDeterminismo.Disparou("PawnCollisionPosOffsetFor (dentro do tick)");
+        __result = Vector3.zero;
+    }
+}

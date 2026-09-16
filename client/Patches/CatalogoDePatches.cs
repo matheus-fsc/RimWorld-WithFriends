@@ -64,6 +64,13 @@ public static class CatalogoDePatches
         },
         new AlvoDePatch
         {
+            Tipo = typeof(Verse.PawnCollisionTweenerUtility),
+            Membro = nameof(Verse.PawnCollisionTweenerUtility.PawnCollisionPosOffsetFor),
+            Recurso = "desvio de colisão fora da simulação",
+            Motivo = "conta pawns pela ordem da lista da célula, que é história de processo, e entra na origem do tiro",
+        },
+        new AlvoDePatch
+        {
             Tipo = typeof(Verse.PawnLeaner),
             Membro = nameof(Verse.PawnLeaner.LeanOffset),
             Recurso = "inclinação fora da simulação",
