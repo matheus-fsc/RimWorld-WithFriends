@@ -13,7 +13,9 @@ string saida = args.Length > 1 ? args[1] : "auditoria.txt";
 // Numa consulta pontual não há fonte do Multiplayer: o terceiro argumento é o
 // campo perguntado, e tentar extrair remendos dele imprimia "0 alvos extraídos
 // de Pawn_PlayerSettings::medCare", que é ruído com cara de erro.
-string? fonteMp = args.Length > 2 && !args.Contains("--escritores") ? args[2] : null;
+string? fonteMp = args.Length > 2 &&
+                  !args.Contains("--escritores") && !args.Contains("--chamadores")
+    ? args[2] : null;
 
 // O que o Multiplayer já remenda. Cruzar com o nosso achado separa suspeita de
 // prioridade: se ele remenda, houve motivo — alguém pagou com bug.
@@ -58,6 +60,29 @@ var tipos = TodosOsTipos(assembly.MainModule).ToList();
 //
 // E a resposta vem completa: se dois lugares escrevem, os dois aparecem, e
 // remendar só um seria divergência silenciosa.
+// A irmã da de cima: "quem chama este método?". Foi ela que mostrou que
+// `HealthCardUtility.CreateSurgeryBill` tem sete chamadores de menu E um de
+// tick — o que decidiu remendar a fonte em vez dos chamadores, e pôr um guarda
+// de interface para não transformar simulação em comando.
+int ondeChamadores = Array.IndexOf(args, "--chamadores");
+if (ondeChamadores >= 0 && ondeChamadores + 1 < args.Length)
+{
+    string alvo = args[ondeChamadores + 1];
+    Console.WriteLine($"quem chama {alvo}:");
+
+    foreach (var tipo in tipos)
+    foreach (var metodo in tipo.Methods.Where(m => m.HasBody))
+    foreach (var ins in metodo.Body.Instructions)
+        if ((ins.OpCode.Code == Code.Call || ins.OpCode.Code == Code.Callvirt) &&
+            ins.Operand?.ToString()?.Contains(alvo) == true)
+        {
+            Console.WriteLine($"   {tipo.FullName}.{metodo.Name}");
+            break;
+        }
+
+    return 0;
+}
+
 int ondeEscritores = Array.IndexOf(args, "--escritores");
 if (ondeEscritores >= 0 && ondeEscritores + 1 < args.Length)
 {
