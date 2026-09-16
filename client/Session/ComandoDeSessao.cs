@@ -399,6 +399,16 @@ public static class ComandoDeSessao
                     r.ReadInt32(), r.ReadString(), r.ReadInt32(), r.ReadString());
             }
 
+            case TipoDeComando.AjusteDeCoisa:
+            {
+                using var ms = new MemoryStream(payload, writable: false);
+                using var r = new BinaryReader(ms);
+                r.ReadByte();
+
+                return AjustesDeCoisa.Aplicar(
+                    r.ReadInt32(), r.ReadString(), r.ReadSingle(), r.ReadString());
+            }
+
             case TipoDeComando.Zona:
             {
                 using var ms = new MemoryStream(payload, writable: false);

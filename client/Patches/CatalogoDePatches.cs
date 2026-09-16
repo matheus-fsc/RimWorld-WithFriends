@@ -289,6 +289,28 @@ public static class CatalogoDePatches
             Recurso = "apagar plano dentro de sessão",
             Motivo = "o desenho que orienta o que construir depois",
         },
+        // As três propriedades de VALOR que faltavam (AjustesDeCoisa).
+        new AlvoDePatch
+        {
+            Tipo = typeof(RimWorld.CompRefuelable),
+            Membro = nameof(RimWorld.CompRefuelable.TargetFuelLevel),
+            Recurso = "nível de combustível desejado dentro de sessão",
+            Motivo = "decide se um colono larga o que está fazendo para ir abastecer",
+        },
+        new AlvoDePatch
+        {
+            Tipo = typeof(RimWorld.CompMechGestatorTank),
+            Membro = nameof(RimWorld.CompMechGestatorTank.State),
+            Recurso = "estado do tanque do gestador dentro de sessão",
+            Motivo = "encher, esvaziar ou manter — e o trabalho que isso gera",
+        },
+        new AlvoDePatch
+        {
+            Tipo = typeof(Verse.Pawn),
+            Membro = nameof(Verse.Pawn.Name),
+            Recurso = "renomear pawn dentro de sessão",
+            Motivo = "é como o OUTRO jogador reconhece o colono de quem se está falando",
+        },
         // As chaves que o mapa de decisões dava como herdáveis "de graça" — e
         // que, depois de separar propriedade de campo, são só estas três.
         new AlvoDePatch

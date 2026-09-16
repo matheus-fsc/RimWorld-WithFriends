@@ -178,6 +178,16 @@ def cenario_ajustes(c, log):
             except RuntimeError:
                 pass
 
+        # Renomear: o gesto que exercita `AjustesDeCoisa` num save qualquer —
+        # combustível quer um gerador e o tanque quer Biotech, mas pawn tem em
+        # toda colônia. E o nome importa em visita: é como o OUTRO jogador
+        # reconhece o colono de quem se está falando.
+        for p in colonos[:2]:
+            try:
+                c.cmd(f"renomear {p['id']} apelido{volta}")
+            except RuntimeError as e:
+                log(f"renomear {p['id']}: {e}")
+
         log(f"volta {volta + 1}: {len(colonos)} colono(s) reconfigurados")
         time.sleep(1.5)
 

@@ -182,6 +182,7 @@ public static class PortaDeControle
                        "incidente DEF [pontos] | velocidade NOME | despejar | sair " +
                        "| ajuste ID chave numero [texto] | divergir raid [pontos] " +
                        "| zona listar|apagar ID|apagararea ID|inverter ID|novaarea [nome]|renomear ID nome " +
+                       "| renomear ID apelido " +
                        "|| interface: selecionar ID… | menu x,z | irarrastando x,z | " +
                        "arrastar x1,z1 x2,z2 [passos] | olhar x,z";
 
@@ -223,6 +224,9 @@ public static class PortaDeControle
 
             case "zona":
                 return Zona(partes);
+
+            case "renomear":
+                return Renomear(partes);
 
             case "divergir":
                 return Divergir(partes);
@@ -331,6 +335,31 @@ public static class PortaDeControle
                 return "erro uso: zona listar|apagar ID|apagararea ID|inverter ID|" +
                        "novaarea [nome]|renomear ID nome";
         }
+    }
+
+    /// <summary>
+    /// Renomear um pawn pela mesma porta do clique.
+    ///
+    /// <para>É o gesto que exercita <c>AjustesDeCoisa</c> com um save qualquer:
+    /// combustível quer um gerador e o tanque quer Biotech, mas pawn tem em toda
+    /// colônia. Testar o caminho importa mais que testar a chave.</para>
+    /// </summary>
+    static string Renomear(string[] partes)
+    {
+        if (partes.Length < 3) return "erro uso: renomear ID apelido";
+        if (!int.TryParse(partes[1], out int id)) return "erro id inválido";
+
+        var pawn = Achar(id);
+        if (pawn == null) return $"erro pawn {id} não encontrado";
+
+        string apelido = string.Join(" ", partes[2..]);
+        var antes = pawn.Name as NameTriple;
+
+        pawn.Name = antes != null
+            ? new NameTriple(antes.First, apelido, antes.Last)
+            : new NameSingle(apelido);
+
+        return $"ok {id} → {apelido}";
     }
 
     /// <summary>

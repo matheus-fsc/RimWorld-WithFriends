@@ -171,6 +171,23 @@ public enum TipoDeComando : byte
     /// já era comando.</para>
     /// </summary>
     Zona = 12,
+
+    /// <summary>
+    /// Um ajuste de uma coisa do mapa que não é liga/desliga: nível de
+    /// combustível desejado, estado do tanque do gestador, nome do pawn.
+    ///
+    /// <para><b>Por que não cabe em <see cref="Alternar"/>.</b> Aquele carrega
+    /// <c>bool</c> e mais nada, e estes não são booleanos: um é fração, um é
+    /// enum, um é texto. Um tipo por item seriam três trocas de protocolo para
+    /// três decisões; aqui vai <c>(coisa, chave, valor, texto)</c>, e a próxima
+    /// custa uma entrada no registro de <c>AjustesDeCoisa</c>.</para>
+    ///
+    /// <para>São as três propriedades de valor que o mapa de decisões dava como
+    /// herdáveis. As outras vinte e três que pareciam iguais são <b>campos
+    /// públicos</b> escritos dentro da lambda de um botão — sem setter não há
+    /// fonte para remendar, e aquilo é outro problema.</para>
+    /// </summary>
+    AjusteDeCoisa = 13,
 }
 
 /// <summary>
