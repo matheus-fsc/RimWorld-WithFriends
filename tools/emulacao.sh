@@ -39,7 +39,7 @@ DADOS_ARB="$HOME/.rimworld-arbitro"
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 echo "== fechando o que estiver aberto"
-pkill -f RimWorldLinux || true
+pkill -x RimWorldLinux || true
 pkill -f WithFriends.Server || true
 sleep 1
 

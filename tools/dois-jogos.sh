@@ -89,7 +89,7 @@ if [[ ! -x "$JOGO/RimWorldLinux" ]]; then
 fi
 
 echo "== fechando instâncias abertas"
-pkill -f RimWorldLinux || true
+pkill -x RimWorldLinux || true
 sleep 1
 
 if [[ $SO_MATAR -eq 1 ]]; then

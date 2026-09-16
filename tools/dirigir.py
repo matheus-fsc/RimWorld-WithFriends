@@ -30,11 +30,13 @@ Saída
 import argparse
 import os
 import random
+import signal
 import subprocess
 import sys
 import time
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
+RAIZ = os.path.dirname(AQUI)
 sys.path.insert(0, AQUI)
 
 from controle import Controle          # noqa: E402
@@ -180,10 +182,47 @@ def cenario_ajustes(c, log):
         time.sleep(1.5)
 
 
+def cenario_deriva(c, log):
+    """
+    Divergência GRANDE de um lado só, e depois deixa correr — a medição da ADR 0022.
+
+    Injeta um assalto no árbitro e em mais ninguém, pela única porta que fura o
+    caminho de comando de propósito. Com `--semdigital`, a divergência não é
+    detectada nem desfeita, e os dois lados correm livres sob a mesma barreira:
+    passos casados, estado se afastando. É a condição da medida.
+
+    O que se quer saber: quanto os pawns COMUNS aos dois lados se afastam com o
+    tempo. A deriva já medida partiu de uma divergência pequena (uma escolha de
+    job) e deu cinco pawns em 151 depois de dois minutos. A partir de um assalto
+    inteiro, ninguém sabe — e é esse número que decide se corrigir posição a
+    1 Hz basta.
+    """
+    porta_arbitro = int(os.environ.get("WF_PORTA_ARBITRO", "0"))
+    if not porta_arbitro:
+        log("sem porta do árbitro — nada a injetar")
+        return
+
+    estado = c.estado()
+    log(f"antes: passo {estado.get('passo')}, {estado.get('pawns')} pawns no anfitrião")
+
+    try:
+        with Controle(porta_arbitro) as arb:
+            log(f"árbitro: {arb.estado().get('pawns')} pawns")
+            log("injetando: " + arb.cmd("divergir raid 2000"))
+    except (OSError, RuntimeError) as e:
+        log(f"não consegui injetar no árbitro: {e}")
+        return
+
+    # Daqui em diante, nada. Os dois correm e os diários guardam o estado por
+    # tick; a deriva se lê depois, comparando posições dos pawns em comum.
+    log("divergência injetada — deixando correr")
+
+
 CENARIOS = {
     "ir-aqui": cenario_ir_aqui,
     "menus": cenario_menus,
     "ajustes": cenario_ajustes,
+    "deriva": cenario_deriva,
 }
 
 
@@ -193,8 +232,79 @@ LOG_ANFITRIAO = os.path.expanduser(
     "~/.config/unity3d/Ludeon Studios/RimWorld by Ludeon Studios/Player.log")
 
 
+LOG_ARBITRO = os.path.expanduser("~/.rimworld-arbitro/Player.log")
+SAIDA_LANCADOR = os.path.join(os.environ.get("TMPDIR", "/tmp"), "wf-lancador.log")
+
+
 def jogos_vivos():
     return subprocess.run(["pgrep", "-x", "RimWorldLinux"],
+                          stdout=subprocess.DEVNULL).returncode == 0
+
+
+def guerra_de_identidade():
+    """
+    Há duas emulações disputando a mesma identidade?
+
+    Sintoma, do lado do jogo: "Outra conexão entrou como <o meu próprio id>",
+    a cada 15s, para sempre. Quem entra com o id de alguém desloca o antigo; se
+    os dois lados são o MESMO jogo rodando duas vezes, cada um derruba o outro e
+    a visita nunca sai do passo 0.
+
+    Medido na corrida da ADR 0022: três tentativas inteiras (15 minutos) presas
+    nisso. Reconhecer custa uma leitura de log e economiza o prazo inteiro.
+    """
+    for caminho in (LOG_ANFITRIAO, LOG_ARBITRO):
+        try:
+            with open(caminho, errors="replace") as f:
+                if "IdentidadeAssumidaPorOutraConexao" in f.read()[-20000:]:
+                    return True
+        except OSError:
+            pass
+    return False
+
+
+def limpar(processo=None):
+    """
+    Deixa a máquina sem nada de emulação de pé — e CONFIRMA.
+
+    `pkill` no jogo não basta: quem lança é um script (`wf emular`) que ainda
+    pode estar no `dotnet build` quando a morte chega, e sobe o jogo depois
+    dela. Era essa a origem da guerra de identidade. Então morre o grupo de
+    processos do script primeiro, o jogo depois, e só então se confere.
+    """
+    if processo is not None:
+        try:
+            os.killpg(os.getpgid(processo.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OSError):
+            pass
+
+    # Limpo duas vezes seguidas, com folga entre elas: um jogo lançado há um
+    # instante ainda não está na tabela de processos, e "limpo" cedo demais é
+    # como nasce a segunda emulação.
+    limpo = 0
+    for _ in range(30):
+        # Colchete no padrão: assim ele não casa com o shell que o executa
+        # nem com este próprio processo.
+        subprocess.run(["pkill", "-9", "-f", "tools/wf emula[r]"], stdout=subprocess.DEVNULL)
+        subprocess.run(["pkill", "-9", "-x", "RimWorldLinux"], stdout=subprocess.DEVNULL)
+        time.sleep(2)
+        limpo = limpo + 1 if not jogos_vivos() and not emulador_vivo() else 0
+        if limpo >= 2:
+            return True
+    return False
+
+
+def ultima_linha_do_lancador():
+    try:
+        with open(SAIDA_LANCADOR, errors="replace") as f:
+            linhas = [l.strip() for l in f if l.strip()]
+        return linhas[-1] if linhas else ""
+    except OSError:
+        return ""
+
+
+def emulador_vivo():
+    return subprocess.run(["pgrep", "-f", "tools/wf emula[r]"],
                           stdout=subprocess.DEVNULL).returncode == 0
 
 
@@ -226,20 +336,45 @@ def lado_vivo(porta):
         return False
 
 
-def esperar_visita(porta, prazo, log):
+def esperar_visita(porta, prazo, log, processo=None):
     """
     Espera a porta responder e a sessão chegar em Simulando.
 
-    Devolve "ok", "morreu" ou "prazo". Distinguir os três importa: o jogo
+    Devolve "ok", "morreu", "duplicada" ou "prazo". Distinguir importa: o jogo
     morrer na subida é comum o bastante para merecer nova tentativa — o GC do
     mono estoura de vez em quando no primeiro arranque depois de um build — e
     esperar cinco minutos por um processo que já morreu é desperdício puro.
+
+    O caso mais rápido de todos é o mais comum: o `RimWorldLinux` estoura com
+    SIGSEGV em segundos, o script lançador termina, e não há jogo nenhum. Aí não
+    há log para ler nem porta para bater — quem responde é a tabela de
+    processos. Reconhecer isso em 3s em vez de 300 é a diferença entre cinco
+    tentativas em um minuto e cinco tentativas em vinte e cinco.
     """
     limite = time.time() + prazo
     avisou = False
     sem_jogo = 0
 
+    morto_seguido = 0
+
     while time.time() < limite:
+        # **O lançador já terminou e não há jogo — mas não na primeira leitura.**
+        #
+        # `wf emular` sai assim que solta o `nohup`, e o processo do Unity leva
+        # um instante para aparecer na tabela. Concluir "morreu" nessa fresta
+        # deixa vivo o jogo que estava nascendo: a tentativa seguinte limpa uma
+        # máquina que ainda parece limpa, sobe outro anfitrião, e os dois acabam
+        # brigando pela mesma identidade. Foi assim que doze tentativas seguidas
+        # se declararam mortas enquanto deixavam doze jogos de pé.
+        if processo is not None and processo.poll() is not None and not jogos_vivos():
+            morto_seguido += 1
+            if morto_seguido >= 5:
+                log(f"lançador saiu com {processo.returncode}; última linha: "
+                    f"{ultima_linha_do_lancador()!r}")
+                return "sumiu"
+        else:
+            morto_seguido = 0
+
         try:
             with Controle(porta, tempo=5.0) as c:
                 estado = c.estado()
@@ -263,7 +398,9 @@ def esperar_visita(porta, prazo, log):
                     log(f"os dois lados de pé; visita no passo {estado['passo']}")
                     return "ok"
                 if desistiu():
-                    return "morreu"
+                    return "desistiu"
+                if guerra_de_identidade():
+                    return "duplicada"
 
                 if not avisou:
                     log(f"conectado; esperando a visita (sessão={estado.get('sessao')})")
@@ -274,11 +411,13 @@ def esperar_visita(porta, prazo, log):
             # não. Três leituras seguidas para não confundir com a troca de
             # partida, em que o anfitrião reabre.
             if desistiu():
-                return "morreu"
+                return "desistiu"
+            if guerra_de_identidade():
+                return "duplicada"
 
             sem_jogo = sem_jogo + 1 if not jogos_vivos() else 0
             if sem_jogo >= 3:
-                return "morreu"
+                return "sumiu"
 
         time.sleep(2)
 
@@ -293,6 +432,8 @@ def main():
     ap.add_argument("--arbitro", default="presetfull")
     ap.add_argument("--segundos", type=int, default=180)
     ap.add_argument("--porta", type=int, default=25600)
+    ap.add_argument("--visivel", action="store_true",
+                    help="abre os dois jogos com janela, lado a lado, para acompanhar")
     ap.add_argument("--semente", type=int, default=None,
                     help="semente do sorteio dos gestos, para repetir a mesma corrida")
     args = ap.parse_args()
@@ -315,14 +456,48 @@ def main():
         print(f"[dirigir] {m}", flush=True)
 
     log(f"semente {semente} — repita com --semente {semente}")
+    os.environ["WF_PORTA_ARBITRO"] = str(args.porta + 1)
+
+    if args.cenario == "deriva":
+        log("modo medição: digital calada, divergência injetada de um lado só")
+
+    # **Com janela, para conferir com os olhos.**
+    #
+    # A emulação cega é mais rápida e é o padrão, mas ela só devolve números. Há
+    # perguntas que só a tela responde — "o assalto chegou dos dois lados?", "os
+    # colonos estão andando ou parados?" — e há defeito que se reconhece em três
+    # segundos de vídeo e custa uma hora de diário. As duas janelas ficam lado a
+    # lado: anfitrião à esquerda, árbitro à direita.
+    if args.visivel:
+        log("modo visível: duas janelas lado a lado (anfitrião à esquerda)")
 
     wf = os.path.join(AQUI, "wf")
 
+    # **Compilar uma vez, fora das tentativas.**
+    #
+    # `wf emular` compila antes de subir o jogo. Repetir isso a cada tentativa
+    # põe um build de ~30s entre a morte da tentativa anterior e o nascimento da
+    # próxima — e é nessa janela que nasce a segunda emulação.
+    log("compilando uma vez (as tentativas não recompilam)")
+    for projeto in ("client/Client.csproj", "server/Server.csproj"):
+        subprocess.run(["dotnet", "build", os.path.join(RAIZ, projeto), "-v", "q", "--nologo"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
     def lancar():
-        subprocess.Popen(
+        return subprocess.Popen(
             [wf, "emular", args.anfitriao, args.arbitro, str(args.segundos),
-             "--controle", str(args.porta), "--caminho"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+             "--controle", str(args.porta)]
+            + ([] if args.cenario == "deriva" else ["--caminho"])
+            + (["--semdigital"] if args.cenario == "deriva" else [])
+            + (["--visivel"] if args.visivel else [])
+            + ["--sem-compilar"],
+            # A saída do lançador vai para arquivo, não para o vazio: quando a
+            # tentativa falha, o motivo costuma estar nas duas linhas que ele
+            # imprimiu antes de morrer — e jogá-las fora foi o que fez uma tarde
+            # inteira ser gasta perguntando ao log do jogo uma coisa que o script
+            # já tinha dito.
+            stdout=open(SAIDA_LANCADOR, "w"), stderr=subprocess.STDOUT,
+            start_new_session=True)
 
     # **Tentar até ficar estável, não tentar um número bonito de vezes.**
     #
@@ -333,23 +508,43 @@ def main():
     #
     # E cada tentativa começa do zero: mata tudo antes, porque instância presa
     # no desligamento disputa com a nova.
-    for tentativa in range(1, 6):
-        subprocess.run(["pkill", "-9", "-x", "RimWorldLinux"], stdout=subprocess.DEVNULL)
-        time.sleep(2)
-        lancar()
+    #
+    # Doze e não cinco: agora que o estouro na subida é reconhecido em segundos
+    # (nada de porta, nada de processo), uma tentativa falha custa uns poucos
+    # segundos em vez dos cinco minutos do prazo. Tentar mais vezes ficou barato.
+    TENTATIVAS = 12
+    emulacao = None
+    for tentativa in range(1, TENTATIVAS + 1):
+        if not limpar(emulacao):
+            log("não consegui deixar a máquina limpa — pare os jogos à mão")
+            return 1
+        # Log zerado: a tentativa anterior deixou nele exatamente as marcas que
+        # este laço procura, e ler as de ontem é decidir pelo passado.
+        for caminho in (LOG_ANFITRIAO, LOG_ARBITRO):
+            try:
+                open(caminho, "w").close()
+            except OSError:
+                pass
+        emulacao = lancar()
         log(f"emulação lançada (tentativa {tentativa}); esperando a visita")
 
-        resultado = esperar_visita(args.porta, prazo=300, log=log)
+        resultado = esperar_visita(args.porta, prazo=300, log=log, processo=emulacao)
         if resultado == "ok":
             break
 
-        if resultado in ("morreu", "prazo") and tentativa < 5:
-            log(f"subida instável ({resultado}) — tentando de novo ({tentativa + 1}/5)")
-            subprocess.run(["pkill", "-9", "-x", "RimWorldLinux"], stdout=subprocess.DEVNULL)
-            time.sleep(3)
+        if resultado != "ok" and tentativa < TENTATIVAS:
+            porque = {"duplicada": "duas emulações na mesma identidade",
+                      "sumiu": "o processo do jogo sumiu",
+                      "desistiu": "o anfitrião desistiu (sem árbitro não há visita)",
+                      "prazo": "passou do prazo sem a visita começar"}.get(resultado, resultado)
+            log(f"subida instável ({porque}) — tentando de novo ({tentativa + 1}/{TENTATIVAS})")
             continue
 
+        # Desistir sem limpar deixa o último anfitrião vivo — e ele ainda vai
+        # lançar o árbitro dele. O próximo que rodar herda os dois como órfãos,
+        # com identidade repetida, e paga por um erro que não cometeu.
         log(f"a visita não ficou de pé ({resultado}) — veja os Player.log")
+        limpar(emulacao)
         return 1
 
     try:

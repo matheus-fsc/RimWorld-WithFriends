@@ -53,10 +53,12 @@ wf — linha de comando do With Friends
       --velocidade V               Normal|Fast|Superfast|Ultrafast (padrão Fast)
       --controle P                 porta de controle: anfitrião em P, árbitro em P+1
       --semdigital                 não detectar divergência (medir deriva; ADR 0022)
+      --sem-compilar               pula o build (quem repete a corrida já compilou)
   wf comparar                      compara os dois diários mais novos
   wf erros [--todos]               agrupa erros e avisos; destaca os de um lado só
   wf controle [--porta P] [cmd]    dirige um jogo aberto com -controle=P
   wf dirigir CENARIO               visita inteira com gestos de interface, e compara
+      --visivel                    com as duas janelas lado a lado, para acompanhar
   wf decisoes [--todos|--nossos]   mapa das decisões de jogador, extraído do MP
   wf auditar                       audita o assembly do jogo (alcance + MP)
   wf saves [p1|p2]                 lista os saves de cada instância
@@ -68,12 +70,48 @@ Variáveis: WF_JOGO, WF_DADOS_P1, WF_DADOS_P2, WF_DADOS_ARB, WF_PORTA.
 FIM
 }
 
+# **`pkill -f` é uma arma que atira para trás.**
+#
+# `-f` casa com a linha de comando INTEIRA de qualquer processo — inclusive a do
+# shell que digitou `pkill -f RimWorldLinux`, a do editor com o arquivo aberto, a
+# do orquestrador que só queria matar o jogo. Foi assim que uma corrida da ADR
+# 0022 matou o próprio orquestrador no primeiro segundo, três vezes seguidas,
+# sem deixar rastro: o processo que ia ler o resultado morria junto com o alvo.
+#
+# `-x` casa com o NOME do processo e com mais nada. Para o jogo, que se chama
+# RimWorldLinux, é exatamente o que se quer.
+#
+# Mata todo jogo e ESPERA ficar limpo duas vezes seguidas.
+#
+# Um `pkill` só não basta: o anfitrião lança o árbitro alguns segundos depois de
+# subir, e matar o anfitrião na fresta antes disso deixa o árbitro órfão vivo.
+# Órfão vivo é identidade duplicada no coordenador — os dois se derrubam a cada
+# 15s e a visita nunca sai do passo 0. Foi assim que uma corrida inteira da ADR
+# 0022 se perdeu, com o barulho de várias simulações ao mesmo tempo.
+fechar_jogos() {
+    local limpo=0 i
+    for i in $(seq 1 15); do
+        pkill -9 -x RimWorldLinux >/dev/null 2>&1 || true
+        sleep 2
+        if pgrep -x RimWorldLinux >/dev/null 2>&1; then limpo=0; else limpo=$((limpo + 1)); fi
+        # `if` e não `[[ … ]] && return`: com `set -e`, um `[[ … ]]` falso no
+        # fim do corpo do laço encerra o script inteiro — silenciosamente, sem
+        # uma linha sequer no log. Foi o que fez nove tentativas seguidas se
+        # declararem "o processo do jogo sumiu" quando o jogo nem chegou a ser
+        # lançado.
+        if [[ $limpo -ge 2 ]]; then return 0; fi
+    done
+    erro "não consegui fechar todos os jogos"
+    return 1
+}
+
 compilar_cliente() { dotnet build "$RAIZ/client/Client.csproj" -v q --nologo; }
 compilar_servidor() { dotnet build "$RAIZ/server/Server.csproj" -v q --nologo; }
 
-subir_servidor_fundo() {
-    compilar_servidor
-    pkill -f WithFriends.Server >/dev/null 2>&1 || true
+subir_servidor_fundo() { compilar_servidor; subir_servidor_fundo_sem_compilar; }
+
+subir_servidor_fundo_sem_compilar() {
+    pkill -f 'WithFriends[.]Server[.]dll' >/dev/null 2>&1 || true
     sleep 1
     nohup dotnet "$RAIZ/server/bin/Debug/WithFriends.Server.dll" "$PORTA" "$RAIZ/dados" \
         > "$RAIZ/dados-servidor.log" 2>&1 &
@@ -181,7 +219,7 @@ cmd_rodar() {
 }
 
 cmd_emular() {
-    local visivel=0 sangue=0 caminho=0 semdigital=0 roteiro="" velocidade="" controle="" args=() pegar_roteiro=0 pegar_vel=0 pegar_ctl=0
+    local visivel=0 sangue=0 caminho=0 semdigital=0 compilar=1 roteiro="" velocidade="" controle="" args=() pegar_roteiro=0 pegar_vel=0 pegar_ctl=0
     for a in "$@"; do
         if [[ $pegar_roteiro -eq 1 ]]; then roteiro="$a"; pegar_roteiro=0; continue; fi
         if [[ $pegar_vel -eq 1 ]]; then velocidade="$a"; pegar_vel=0; continue; fi
@@ -191,6 +229,7 @@ cmd_emular() {
             --sangue)    sangue=1 ;;
             --caminho)   caminho=1 ;;
             --semdigital) semdigital=1 ;;
+            --sem-compilar) compilar=0 ;;
             --roteiro)   pegar_roteiro=1 ;;
             --roteiro=*) roteiro="${a#*=}" ;;
             --velocidade)   pegar_vel=1 ;;
@@ -204,12 +243,24 @@ cmd_emular() {
     [[ -n "$host" && -n "$arb" ]] || { erro "uso: wf emular HOST ARB [segundos] [--visivel]"; return 2; }
 
     msg "== fechando o que estiver aberto"
-    pkill -f RimWorldLinux >/dev/null 2>&1 || true
-    pkill -f WithFriends.Server >/dev/null 2>&1 || true
+    fechar_jogos
+    pkill -f 'WithFriends[.]Server[.]dll' >/dev/null 2>&1 || true
     sleep 1
 
-    msg "== compilando"; compilar_cliente
-    subir_servidor_fundo
+    # **Compilar é o que abre a janela para duas emulações ao mesmo tempo.**
+    #
+    # Quem repete a corrida (tools/dirigir.py) mata o jogo entre as tentativas.
+    # Se a tentativa anterior ainda estiver no `dotnet build`, ela sobe o jogo
+    # DEPOIS dessa morte — e aí há dois anfitriões com a mesma identidade, cada
+    # um derrubando o outro do coordenador a cada 15s, para sempre. Medido: a
+    # corrida da ADR 0022 passou três tentativas nessa guerra sem nunca começar
+    # a visita. Quem já compilou passa --sem-compilar e a janela fecha.
+    if [[ $compilar -eq 1 ]]; then
+        msg "== compilando"; compilar_cliente
+        subir_servidor_fundo
+    else
+        subir_servidor_fundo_sem_compilar
+    fi
     semear_pasta "$DADOS_ARB" "$arb" || return 1
 
     local semtela="-batchmode -nographics" extra=""
@@ -273,13 +324,13 @@ cmd_diarios() {
 }
 
 cmd_matar() {
-    pkill -f RimWorldLinux >/dev/null 2>&1 || true
-    pkill -f WithFriends.Server >/dev/null 2>&1 || true
+    pkill -x RimWorldLinux >/dev/null 2>&1 || true
+    pkill -f 'WithFriends[.]Server[.]dll' >/dev/null 2>&1 || true
 
     # Um jogo que ignora o TERM segura a janela dele, e a corrida seguinte abre
     # em cima de uma tela cheia órfã. Dá meio segundo e insiste.
     sleep 1
-    pkill -9 -f RimWorldLinux >/dev/null 2>&1 || true
+    pkill -9 -x RimWorldLinux >/dev/null 2>&1 || true
 
     msg "fechado."
 }
