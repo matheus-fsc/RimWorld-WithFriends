@@ -107,6 +107,13 @@ public static class CatalogoDePatches
         },
         new AlvoDePatch
         {
+            Tipo = typeof(Verse.JitterHandler),
+            Membro = nameof(Verse.JitterHandler.CurrentOffset),
+            Recurso = "tranco fora da simulação",
+            Motivo = "o tremor de quem leva um golpe decai por QUADRO no 1.6 e entra na origem do tiro por caster.DrawPos",
+        },
+        new AlvoDePatch
+        {
             Tipo = typeof(Verse.PawnCollisionTweenerUtility),
             Membro = nameof(Verse.PawnCollisionTweenerUtility.PawnCollisionPosOffsetFor),
             Recurso = "desvio de colisão fora da simulação",

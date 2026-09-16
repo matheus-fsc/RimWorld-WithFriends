@@ -175,3 +175,57 @@ public static class DesvioDeColisaoForaDaSimulacao
         __result = Vector3.zero;
     }
 }
+
+
+/// <summary>
+/// O tranco de quem leva ou dá um golpe é tremor de tela — e estava entrando na
+/// balística.
+///
+/// <para><b>Como foi pego.</b> Pelo instrumento, não por palpite. O rastreio
+/// passou a gravar a posição de desenho e o tranco por pawn, e a sessão seguinte
+/// respondeu numa linha:</para>
+///
+/// <code>
+/// tranco   1º no tick 776  #37729 Kenta:  A (0.020, 0.132)  B (0.023, 0.150)
+/// desenho  1º no tick 776  #37729 Kenta:  A (110.520, 90.632)  B (110.523, 90.650)
+/// pos, custo, vel, mover: só divergem no tick 1135  ← consequência
+/// </code>
+///
+/// <para>A posição de desenho difere exatamente pela diferença do tranco. E uma
+/// bala disparada no tick 897 nasceu deslocada de (0,05, 0,19) — o mesmo
+/// valor.</para>
+///
+/// <para><b>Por que os dois lados divergem.</b> O tranco cai por tick
+/// (<c>JitterDropPerTick</c>), o que parece seguro — até se perguntar quem o faz
+/// cair:</para>
+///
+/// <code>
+/// Map.MapUpdate                       ← QUADRO, não tick
+///   → PostTickVisuals.ProcessPostTickVisuals
+///     → Pawn.ProcessPostTickVisuals
+///       → Pawn_DrawTracker.ProcessPostTickVisuals
+///         → JitterHandler.ProcessPostTickVisuals
+/// </code>
+///
+/// <para>No 1.6 os visuais pós-tick são tocados pelo quadro. Duas máquinas
+/// desenham em ritmos diferentes, o tranco decai em momentos diferentes, e
+/// <c>Verb_LaunchProjectile.TryCastShot</c> usa <c>caster.DrawPos</c> como
+/// origem do projétil. Tremor de tela virou pontaria.</para>
+///
+/// <para><b>O guarda.</b> Dentro do tick, tranco zero — é a quarta camada do
+/// mesmo cálculo a sair da simulação, depois do tween, da inclinação e do desvio
+/// de colisão. Fora do tick nada muda e o pawn continua tremendo na tela dos
+/// dois jogadores, cada um no ritmo do seu quadro.</para>
+/// </summary>
+[HarmonyPatch(typeof(JitterHandler), nameof(JitterHandler.CurrentOffset), MethodType.Getter)]
+public static class TrancoForaDaSimulacao
+{
+    [HarmonyPostfix]
+    public static void Depois(ref Vector3 __result)
+    {
+        if (!NaInterface.Tickando) return;
+
+        GuardasDeDeterminismo.Disparou("JitterHandler.CurrentOffset (dentro do tick)");
+        __result = Vector3.zero;
+    }
+}
