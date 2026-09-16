@@ -64,6 +64,13 @@ public static class CatalogoDePatches
         },
         new AlvoDePatch
         {
+            Tipo = typeof(Verse.PawnLeaner),
+            Membro = nameof(Verse.PawnLeaner.LeanOffset),
+            Recurso = "inclinação fora da simulação",
+            Motivo = "entra na origem de cada tiro por caster.DrawPos, e é interpolada quadro a quadro",
+        },
+        new AlvoDePatch
+        {
             Tipo = typeof(RimWorld.StatWorker),
             Membro = "temporaryStatCache",
             Recurso = "caches de combate fora da interface",

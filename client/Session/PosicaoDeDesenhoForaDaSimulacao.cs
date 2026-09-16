@@ -85,3 +85,49 @@ public static class PosicaoDeDesenhoForaDaSimulacao
         __result = Raiz(__instance);
     }
 }
+
+
+/// <summary>
+/// A inclinação para fora da cobertura também é desenho — e ela entra na
+/// <b>origem de cada tiro</b>.
+///
+/// <para><b>Como apareceu.</b> Uma visita divergiu com a mesma bala saindo de
+/// lugares diferentes, 77 ticks antes de a digital acusar:</para>
+///
+/// <code>
+/// =96439 Bullet_Shotgun  A: origem 112.50, 93.50   ← centro exato da célula
+///                        B: origem 112.59, 93.45
+/// </code>
+///
+/// <para>Mesmo atirador, mesmo alvo, mesmos ticks até o impacto. O que difere é
+/// de onde a bala nasceu — e <c>Verb_LaunchProjectile.TryCastShot</c> passa
+/// <c>caster.DrawPos</c> como origem do projétil. Posição de desenho, dentro da
+/// simulação.</para>
+///
+/// <para><b>Por que o guarda de cima não bastou.</b> Ele devolve
+/// <c>TweenedPosRoot()</c> dentro do tick, e no 1.6 esse "root" <b>não é
+/// puro</b>: ele soma <c>PawnCollisionTweenerUtility.PawnCollisionPosOffsetFor</c>,
+/// que por sua vez soma <c>Drawer.leaner.LeanOffset</c> — a inclinação de quem
+/// atira de trás de uma parede, interpolada quadro a quadro por
+/// <c>ProcessPostTickVisuals</c>. Tirou-se o tween e deixou-se a inclinação.</para>
+///
+/// <para>O deslocamento medido — 0,087 e 0,049 de célula — é exatamente a escala
+/// de uma inclinação, não a de um passo.</para>
+///
+/// <para><b>O guarda.</b> Dentro do tick, inclinação é zero: a bala sai de onde
+/// o pawn está, não de onde ele parece estar. Fora do tick nada muda, e o pawn
+/// continua se inclinando na tela dos dois jogadores como sempre — cada um no
+/// ritmo do seu quadro, que é o que desenho é.</para>
+/// </summary>
+[HarmonyPatch(typeof(PawnLeaner), nameof(PawnLeaner.LeanOffset), MethodType.Getter)]
+public static class InclinacaoForaDaSimulacao
+{
+    [HarmonyPostfix]
+    public static void Depois(ref Vector3 __result)
+    {
+        if (!NaInterface.Tickando) return;
+
+        GuardasDeDeterminismo.Disparou("PawnLeaner.LeanOffset (dentro do tick)");
+        __result = Vector3.zero;
+    }
+}
