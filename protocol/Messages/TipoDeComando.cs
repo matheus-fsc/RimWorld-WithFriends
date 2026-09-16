@@ -150,6 +150,27 @@ public enum TipoDeComando : byte
     /// que custou o dia 14.</para>
     /// </summary>
     AjusteDePawn = 11,
+
+    /// <summary>
+    /// Uma decisão de zona ou área: apagar, inverter, criar, renomear, escolher
+    /// a planta do plantio.
+    ///
+    /// <para>Mesma forma de <see cref="AjusteDePawn"/> — payload
+    /// <c>(chave, alvo, número, texto)</c>, e quem sabe o que a chave quer dizer
+    /// é o registro em <c>AjustesDeZona</c>.</para>
+    ///
+    /// <para>Não é enfeite: apagar uma zona de plantio faz o trabalho sumir da
+    /// lista e todo colono livre escolher outra coisa no tick seguinte. Inverter
+    /// uma área muda, de uma vez, para onde todo mundo pode ir. É a classe de
+    /// divergência da prioridade de trabalho, com alcance de mapa.</para>
+    ///
+    /// <para>Criar área nova está aqui por um motivo a mais: chama o contador de
+    /// ids únicos do save. Se um lado avança o contador e o outro não, a próxima
+    /// área nasce com id diferente de cada lado — e aí toda referência a área
+    /// passa a apontar para coisas distintas, inclusive a restrição de pawn que
+    /// já era comando.</para>
+    /// </summary>
+    Zona = 12,
 }
 
 /// <summary>
@@ -171,7 +192,7 @@ public static class AutoridadeDeComando
 {
     /// <summary>Este tipo é decisão da colônia, e portanto só do anfitrião?</summary>
     public static bool SoDoAnfitriao(byte tipo) =>
-        (TipoDeComando)tipo == TipoDeComando.Incidente;
+        (TipoDeComando)tipo is TipoDeComando.Incidente or TipoDeComando.Zona;
 
     /// <summary>
     /// Lê o tipo de um payload. <c>0</c> para payload vazio — que nenhum

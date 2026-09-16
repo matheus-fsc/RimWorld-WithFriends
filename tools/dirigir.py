@@ -182,6 +182,100 @@ def cenario_ajustes(c, log):
         time.sleep(1.5)
 
 
+def ids_de_area(c):
+    """Os ids de área que o mapa tem agora, pela listagem da porta de controle."""
+    listagem = c.cmd("zona listar")
+    return {int(p.split()[1]) for p in listagem.split(" | ")
+            if p.strip().startswith("area ")}
+
+
+def esperar_area_nova(c, antes, log, tentativas=25):
+    """
+    Espera uma área que ainda não existia aparecer.
+
+    **Por que esperar.** Dentro de visita, criar área não cria nada na hora: vira
+    comando, atravessa o coordenador, e só nasce quando o passo dela é aplicado
+    nos DOIS lados. Quem clica não recebe id de volta porque não há id ainda.
+
+    A primeira versão deste cenário supunha criação síncrona, leu o `false` do
+    nosso próprio remendo como "o jogo recusou" e desistiu seis vezes seguidas —
+    uma corrida inteira sem exercitar uma linha do que tinha acabado de ser
+    escrito.
+    """
+    for _ in range(tentativas):
+        time.sleep(0.4)
+        novos = ids_de_area(c) - antes
+        if novos:
+            return min(novos)
+    log("a área não apareceu na listagem — o comando não voltou")
+    return None
+
+
+def cenario_zonas(c, log):
+    """
+    A família zona/área inteira, do lado do anfitrião e de mais ninguém.
+
+    Cada uma destas reescreve o plano de trabalho do mapa: apagar um plantio faz
+    o trabalho sumir da lista e todo colono livre escolher outra coisa no mesmo
+    tick; inverter uma área muda, num gesto, para onde todo mundo pode ir. É por
+    isso que a assimetria aqui vale como teste — se qualquer uma escapar do
+    caminho de comando, os dois lados decidem diferente no tick seguinte.
+
+    A ordem é de propósito: cria antes de apagar, para que apagar tenha o que
+    apagar mesmo num mapa sem áreas desenhadas à mão. E cada gesto confere o
+    efeito na listagem em vez de supor que aconteceu — dentro de visita nada
+    acontece na hora.
+    """
+    antes = ids_de_area(c)
+    log(f"antes: {len(antes)} área(s) — {sorted(antes)}")
+
+    feitos = {"criar": 0, "renomear": 0, "inverter": 0, "apagar": 0}
+
+    for volta in range(4):
+        nome = f"teste-{volta}"
+        log(f"volta {volta + 1}: {c.cmd(f'zona novaarea {nome}')}")
+
+        novo = esperar_area_nova(c, antes, log)
+        if novo is None:
+            continue
+        feitos["criar"] += 1
+        log(f"volta {volta + 1}: área {novo} nasceu dos dois lados")
+
+        c.cmd(f"zona renomear {novo} {nome}-renomeada")
+        feitos["renomear"] += 1
+        time.sleep(0.6)
+
+        c.cmd(f"zona inverter {novo}")
+        feitos["inverter"] += 1
+        time.sleep(0.6)
+
+        c.cmd(f"zona apagararea {novo}")
+        time.sleep(0.4)
+
+        # Apagar também é comando: confere que ela SUMIU, em vez de supor.
+        for _ in range(25):
+            time.sleep(0.4)
+            if novo not in ids_de_area(c):
+                feitos["apagar"] += 1
+                break
+        else:
+            log(f"a área {novo} não sumiu — o comando de apagar não voltou")
+
+        antes = ids_de_area(c)
+
+    # A zona de verdade do mapa, por último: é o gesto de maior alcance, e os
+    # ticks seguintes correm depois dele.
+    listagem = c.cmd("zona listar")
+    zonas = [p.split()[1] for p in listagem.split(" | ") if p.strip().startswith("zona ")]
+    if zonas:
+        log(f"apagando a zona {zonas[0]}: {c.cmd(f'zona apagar {zonas[0]}')}")
+    else:
+        log("nenhuma zona no mapa para apagar (o save só tem áreas)")
+
+    log("gestos que completaram o caminho de comando: " +
+        ", ".join(f"{k} {v}" for k, v in feitos.items()))
+
+
 def cenario_deriva(c, log):
     """
     Divergência GRANDE de um lado só, e depois deixa correr — a medição da ADR 0022.
@@ -250,6 +344,7 @@ CENARIOS = {
     "menus": cenario_menus,
     "ajustes": cenario_ajustes,
     "deriva": cenario_deriva,
+    "zonas": cenario_zonas,
 }
 
 

@@ -806,14 +806,22 @@ public class SessaoTests
     };
 
     [Fact]
-    public void So_o_incidente_e_decisao_da_colonia()
+    public void O_incidente_e_a_zona_sao_decisao_da_colonia()
     {
         // A lista de só-anfitrião é curta de propósito, e cresce só por decisão
         // (§4). Este teste existe para que **acrescentar** alguém a ela seja um
         // ato consciente: um tipo novo nasce valendo para os dois, e quem quiser
         // restringi-lo tem de vir mudar isto aqui.
+        //
+        // `Zona` entrou por decisão, em 16/09/2026: zona e área são a arrumação
+        // da casa, e a visita acontece na colônia do anfitrião. O visitante
+        // continua restringindo os próprios pawns às áreas que existem — isso é
+        // `AjusteDePawn` e segue valendo para os dois; o que ele não faz é apagar
+        // a área que o dono desenhou.
+        var soDoAnfitriao = new[] { TipoDeComando.Incidente, TipoDeComando.Zona };
+
         foreach (TipoDeComando tipo in Enum.GetValues(typeof(TipoDeComando)))
-            Assert.Equal(tipo == TipoDeComando.Incidente,
+            Assert.Equal(soDoAnfitriao.Contains(tipo),
                 AutoridadeDeComando.SoDoAnfitriao((byte)tipo));
     }
 

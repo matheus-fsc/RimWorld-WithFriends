@@ -181,6 +181,7 @@ public static class PortaDeControle
                 return "ok estado | pawns [texto] | alistar ID 0|1 | ir ID x,z | " +
                        "incidente DEF [pontos] | velocidade NOME | despejar | sair " +
                        "| ajuste ID chave numero [texto] | divergir raid [pontos] " +
+                       "| zona listar|apagar ID|apagararea ID|inverter ID|novaarea [nome]|renomear ID nome " +
                        "|| interface: selecionar ID… | menu x,z | irarrastando x,z | " +
                        "arrastar x1,z1 x2,z2 [passos] | olhar x,z";
 
@@ -220,6 +221,9 @@ public static class PortaDeControle
             case "ajuste":
                 return Ajuste(partes);
 
+            case "zona":
+                return Zona(partes);
+
             case "divergir":
                 return Divergir(partes);
 
@@ -246,6 +250,97 @@ public static class PortaDeControle
     /// comandos: sem um gesto que os dispare, eles ficariam escritos e nunca
     /// medidos.</para>
     /// </summary>
+    /// <summary>
+    /// A família zona/área pela mesma porta do clique — listar, apagar,
+    /// inverter, criar, renomear.
+    ///
+    /// <para>Como em <see cref="Ajuste"/>: se houver visita, isto vira comando;
+    /// fora dela, acontece local. Chamar o mesmo caminho do mouse é o que faz
+    /// este comando testar o que interessa, em vez de testar a si mesmo.</para>
+    /// </summary>
+    static string Zona(string[] partes)
+    {
+        var mapa = Find.CurrentMap;
+        if (mapa == null) return "erro sem mapa";
+
+        string o_que = partes.Length > 1 ? partes[1] : "listar";
+        int alvo = partes.Length > 2 && int.TryParse(partes[2], out int n) ? n : -1;
+        string texto = partes.Length > 3 ? string.Join(" ", partes[3..]) : "";
+
+        switch (o_que)
+        {
+            case "listar":
+                var zonas = mapa.zoneManager?.AllZones ?? new List<Zone>();
+                var areas = mapa.areaManager?.AllAreas ?? new List<Area>();
+                var linhas = zonas.Select(z => $"zona {z.ID} {z.GetType().Name} {z.CellCount}")
+                    .Concat(areas.Select(a => $"area {a.ID} {a.GetType().Name} {a.TrueCount}"));
+                return "ok " + string.Join(" | ", linhas);
+
+            case "apagar":
+                var zona = mapa.zoneManager?.AllZones?.FirstOrDefault(z => z.ID == alvo);
+                if (zona == null) return $"erro zona {alvo} não encontrada";
+                zona.Delete();
+                return $"ok zona {alvo} apagada";
+
+            case "apagararea":
+                var area = mapa.areaManager?.AllAreas?.FirstOrDefault(a => a.ID == alvo);
+                if (area == null) return $"erro área {alvo} não encontrada";
+                area.Delete();
+                return $"ok área {alvo} apagada";
+
+            case "inverter":
+                var inverter = mapa.areaManager?.AllAreas?.FirstOrDefault(a => a.ID == alvo);
+                if (inverter == null) return $"erro área {alvo} não encontrada";
+                inverter.Invert();
+                return $"ok área {alvo} invertida";
+
+            // **`false` aqui quer dizer duas coisas, e confundi-las custou um
+            // cenário inteiro.**
+            //
+            // Dentro de visita, o nosso próprio remendo devolve `false` de
+            // propósito: a área não nasce agora, nasce quando o comando for
+            // aplicado nos dois lados. Fora de visita, `false` é o jogo
+            // recusando mesmo (limite de áreas). Reportar as duas como "o jogo
+            // recusou" fez o roteiro desistir de criar seis vezes seguidas e
+            // não exercitar nada.
+            //
+            // Quem cria dentro de visita não recebe o id de volta: ele não
+            // existe ainda. Recebe "proposto", e descobre o id na listagem
+            // seguinte — que é, aliás, exatamente o que acontece com o jogador
+            // de carne e osso.
+            case "novaarea":
+                if (mapa.areaManager == null) return "erro mapa sem áreas";
+                if (mapa.areaManager.TryMakeNewAllowed(out var nova))
+                {
+                    if (texto.Length > 0) nova.RenamableLabel = texto;
+                    return $"ok área {nova.ID} criada";
+                }
+
+                return EmVisita()
+                    ? "ok área proposta como comando — o id aparece na próxima listagem"
+                    : "erro o jogo recusou criar a área (limite?)";
+
+            case "renomear":
+                if (mapa.areaManager?.AllAreas?.FirstOrDefault(a => a.ID == alvo)
+                    is not Area_Allowed renomear)
+                    return $"erro área {alvo} não é renomeável";
+                renomear.RenamableLabel = texto;
+                return $"ok área {alvo} → {texto}";
+
+            default:
+                return "erro uso: zona listar|apagar ID|apagararea ID|inverter ID|" +
+                       "novaarea [nome]|renomear ID nome";
+        }
+    }
+
+    /// <summary>
+    /// Há visita em andamento e simulando? É o que separa "virou comando" de
+    /// "o jogo recusou" — as duas chegam aqui como <c>false</c>.
+    /// </summary>
+    static bool EmVisita() =>
+        Colony.SincronizacaoComponent.Atual?.Sessao
+            is { Estado: EstadoSessaoLocal.Simulando, Atual: not null };
+
     static string Ajuste(string[] partes)
     {
         if (partes.Length < 4) return "erro uso: ajuste ID chave numero [texto]";

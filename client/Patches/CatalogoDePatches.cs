@@ -244,6 +244,58 @@ public static class CatalogoDePatches
             Recurso = "alistar dentro de sessão",
             Motivo = "ordem do jogador vira comando, aplicado no mesmo tick nos dois lados (§2.3)",
         },
+        // A família zona/área do mapa de decisões (wf decisoes). Zona e área
+        // reescrevem o plano de trabalho do mapa inteiro: apagar um plantio faz
+        // o trabalho sumir da lista de todo colono livre no mesmo tick.
+        new AlvoDePatch
+        {
+            Tipo = typeof(Verse.Zone),
+            Membro = nameof(Verse.Zone.Delete),
+            Recurso = "apagar zona dentro de sessão",
+            Motivo = "o trabalho da zona some da lista e todo colono livre escolhe outra coisa no tick seguinte",
+        },
+        new AlvoDePatch
+        {
+            Tipo = typeof(Verse.Area),
+            Membro = nameof(Verse.Area.Delete),
+            Recurso = "apagar área dentro de sessão",
+            Motivo = "os pawns restritos a ela ficam sem restrição de uma vez",
+        },
+        new AlvoDePatch
+        {
+            Tipo = typeof(Verse.Area),
+            Membro = nameof(Verse.Area.Invert),
+            Recurso = "inverter área dentro de sessão",
+            Motivo = "muda, num clique, para onde todo mundo pode ir",
+        },
+        new AlvoDePatch
+        {
+            Tipo = typeof(Verse.AreaManager),
+            Membro = nameof(Verse.AreaManager.TryMakeNewAllowed),
+            Recurso = "criar área dentro de sessão",
+            Motivo = "avança o contador de ids do save: se só um lado avança, toda referência a área passa a apontar para coisas diferentes",
+        },
+        new AlvoDePatch
+        {
+            Tipo = typeof(RimWorld.Area_Allowed),
+            Membro = nameof(RimWorld.Area_Allowed.RenamableLabel),
+            Recurso = "renomear área dentro de sessão",
+            Motivo = "é por ele que o jogador reconhece a área no menu de restrição",
+        },
+        new AlvoDePatch
+        {
+            Tipo = typeof(Verse.Plan),
+            Membro = nameof(Verse.Plan.Delete),
+            Recurso = "apagar plano dentro de sessão",
+            Motivo = "o desenho que orienta o que construir depois",
+        },
+        new AlvoDePatch
+        {
+            Tipo = typeof(RimWorld.Zone_Growing),
+            Membro = nameof(RimWorld.Zone_Growing.SetPlantDefToGrow),
+            Recurso = "planta da zona de plantio dentro de sessão",
+            Motivo = "decide o que os colonos semeiam no tick seguinte — semente diferente é colheita diferente",
+        },
         new AlvoDePatch
         {
             Tipo = typeof(Verse.AI.Pawn_JobTracker),
