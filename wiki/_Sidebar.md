@@ -2,6 +2,7 @@
 
 * [[Home]]
 * [[Por que existe]]
+* [[Arquitetura]]
 * [[Estado atual]]
 * [[Determinismo]]
 * [[Bancada]]

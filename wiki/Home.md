@@ -12,11 +12,21 @@ antes dela.
 Fora de sessão não existe sincronia por tick. Nenhuma. E jogar sozinho nunca é
 bloqueado pela ausência de ninguém.
 
+```mermaid
+flowchart LR
+    A["Colônia de A<br/>save próprio"] -->|"convite"| S(("sessão"))
+    B["Colônia de B<br/>save próprio"] -->|"aceite"| S
+    S -->|"lockstep no mapa<br/>do anfitrião"| S
+    S -->|"fim"| A
+    S -->|"fim"| B
+```
+
 ## Por onde começar
 
 | Página | O que responde |
 |---|---|
 | [[Por que existe]] | o que este mod faz que os dois existentes não fazem |
+| [[Arquitetura]] | as três peças, o ciclo da visita e o que acontece quando diverge |
 | [[Estado atual]] | o que funciona hoje, com números, e o que falta |
 | [[Determinismo]] | por que duas máquinas divergem, e as treze causas já achadas |
 | [[Bancada]] | como reproduzir uma visita inteira sem ninguém clicando |
