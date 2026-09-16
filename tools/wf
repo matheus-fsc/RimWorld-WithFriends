@@ -62,6 +62,7 @@ wf — linha de comando do With Friends
       --visivel                    com as duas janelas lado a lado, para acompanhar
   wf decisoes [--todos|--nossos]   mapa das decisões de jogador, extraído do MP
   wf auditar                       audita o assembly do jogo (alcance + MP)
+      --escritores T::campo        quem escreve naquele campo (a pergunta da família de closures)
   wf saves [p1|p2]                 lista os saves de cada instância
   wf diarios                       lista os diários mais novos de cada lado
   wf matar                         fecha jogos e coordenador
@@ -308,7 +309,15 @@ cmd_decisoes() { exec python3 "$RAIZ/tools/decisoes.py" "$@"; }
 cmd_auditar() {
     local dll="$RAIZ/referencia/jogo/steam-1.6.4871/Managed/Assembly-CSharp.dll"
     local mp="$RAIZ/referencia/repos/Multiplayer/Source"
-    [[ -f "$dll" ]] || { erro "assembly do jogo não encontrado em $dll"; return 1; }
+    [[ -f "$dll" ]] || dll="$JOGO/RimWorldLinux_Data/Managed/Assembly-CSharp.dll"
+    [[ -f "$dll" ]] || { erro "assembly do jogo não encontrado"; return 1; }
+
+    # Consultas pontuais ficam em primeiro plano e não escrevem relatório: são
+    # perguntas de quem está no meio de um remendo, não auditoria.
+    if [[ "${1:-}" == "--escritores" ]]; then
+        exec dotnet run --project "$RAIZ/tools/Auditor" -c Release -- "$dll" --escritores "${2:-}"
+    fi
+
     exec dotnet run --project "$RAIZ/tools/Auditor" -c Release -- \
         "$dll" "${1:-$RAIZ/auditoria.txt}" "$mp"
 }

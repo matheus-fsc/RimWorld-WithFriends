@@ -289,6 +289,31 @@ public static class CatalogoDePatches
             Recurso = "apagar plano dentro de sessão",
             Motivo = "o desenho que orienta o que construir depois",
         },
+        // Os pontos de vigilância de campo (CamposObservados). Alvos privados:
+        // o catálogo guarda o nome em texto porque `nameof` não alcança o que
+        // não é público — e é justamente por isso que verificar a existência na
+        // subida importa mais aqui do que em qualquer outro remendo.
+        new AlvoDePatch
+        {
+            Tipo = typeof(RimWorld.HealthCardUtility),
+            Membro = "DrawOverviewTab",
+            Recurso = "tratar-se sozinho dentro de sessão",
+            Motivo = "único lugar que escreve em Pawn_PlayerSettings.selfTend (wf auditar --escritores)",
+        },
+        new AlvoDePatch
+        {
+            Tipo = typeof(RimWorld.MedicalCareUtility),
+            Membro = "MedicalCareSelectButton_GenerateMenu",
+            Recurso = "cuidado médico dentro de sessão",
+            Motivo = "a escrita está na lambda do menu, que roda quando o jogador escolhe",
+        },
+        new AlvoDePatch
+        {
+            Tipo = typeof(RimWorld.HostilityResponseModeUtility),
+            Membro = "DrawResponseButton_GenerateMenu",
+            Recurso = "resposta a hostilidade dentro de sessão",
+            Motivo = "decisão de combate, e a escrita está na lambda do menu",
+        },
         // As três propriedades de VALOR que faltavam (AjustesDeCoisa).
         new AlvoDePatch
         {

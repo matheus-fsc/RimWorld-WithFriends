@@ -10,7 +10,10 @@ if (args.Length == 0)
 
 string dll = args[0];
 string saida = args.Length > 1 ? args[1] : "auditoria.txt";
-string? fonteMp = args.Length > 2 ? args[2] : null;
+// Numa consulta pontual não há fonte do Multiplayer: o terceiro argumento é o
+// campo perguntado, e tentar extrair remendos dele imprimia "0 alvos extraídos
+// de Pawn_PlayerSettings::medCare", que é ruído com cara de erro.
+string? fonteMp = args.Length > 2 && !args.Contains("--escritores") ? args[2] : null;
 
 // O que o Multiplayer já remenda. Cruzar com o nosso achado separa suspeita de
 // prioridade: se ele remenda, houve motivo — alguém pagou com bug.
@@ -43,6 +46,37 @@ var tipos = TodosOsTipos(assembly.MainModule).ToList();
 // formatação do decompilador não mudar. O metadado responde a mesma pergunta
 // sem nada disso, e responde certo: aqui não há "achei um método com o mesmo
 // nome noutra classe".
+// **"Quem escreve neste campo?"**
+//
+// A pergunta central da família de closures. Campo público não tem setter, e o
+// que escreve nele costuma ser uma lambda com nome gerado pelo compilador —
+// `<DrawResponseButton_GenerateMenu>b__0`. Sem esta consulta, descobrir onde
+// remendar é ler código decompilado à mão; com ela, são dois segundos:
+//
+//     wf auditar --escritores Pawn_PlayerSettings::selfTend
+//     → RimWorld.HealthCardUtility.DrawOverviewTab
+//
+// E a resposta vem completa: se dois lugares escrevem, os dois aparecem, e
+// remendar só um seria divergência silenciosa.
+int ondeEscritores = Array.IndexOf(args, "--escritores");
+if (ondeEscritores >= 0 && ondeEscritores + 1 < args.Length)
+{
+    string alvo = args[ondeEscritores + 1];
+    Console.WriteLine($"quem escreve em {alvo}:");
+
+    foreach (var tipo in tipos)
+    foreach (var metodo in tipo.Methods.Where(m => m.HasBody))
+    foreach (var ins in metodo.Body.Instructions)
+        if (ins.OpCode.Code == Code.Stfld &&
+            ins.Operand?.ToString()?.Contains(alvo) == true)
+        {
+            Console.WriteLine($"   {tipo.FullName}.{metodo.Name}");
+            break;
+        }
+
+    return 0;
+}
+
 if (args.Contains("--formas"))
 {
     foreach (var tipo in tipos)

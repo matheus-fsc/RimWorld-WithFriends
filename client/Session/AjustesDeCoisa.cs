@@ -95,11 +95,21 @@ public static class AjustesDeCoisa
 
     public static string Aplicar(int coisaId, string chave, float valor, string texto)
     {
-        if (!Registro.TryGetValue(chave, out var aplicar))
-            return $"ajuste de coisa desconhecido ({chave}) — versões diferentes do mod?";
-
         var dono = ComandoDeSessao.EncontrarCoisa(coisaId);
         if (dono == null) return $"coisa {coisaId} não encontrada para {chave}";
+
+        // Campo observado usa o mesmo payload: o que muda é só quem sabe
+        // escrever nele. Ver CamposObservados — ali não há setter para remendar,
+        // e a mudança é reconhecida comparando o valor antes e depois da
+        // interface.
+        if (CamposObservados.Conhece(chave))
+        {
+            ComoSistema(() => CamposObservados.Aplicar(dono, chave, valor));
+            return $"{dono.LabelShortCap}: {CamposObservados.Descrever(chave)} → {valor:0.##}";
+        }
+
+        if (!Registro.TryGetValue(chave, out var aplicar))
+            return $"ajuste de coisa desconhecido ({chave}) — versões diferentes do mod?";
 
         aplicar(dono, valor, texto);
         return $"{dono.LabelShortCap}: {chave} → {(texto.Length > 0 ? texto : valor.ToString("0.##"))}";
