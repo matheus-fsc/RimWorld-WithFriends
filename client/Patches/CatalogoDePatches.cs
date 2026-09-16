@@ -64,6 +64,13 @@ public static class CatalogoDePatches
         },
         new AlvoDePatch
         {
+            Tipo = typeof(RimWorld.Pawn_ApparelTracker),
+            Membro = "SortWornApparelIntoDrawOrder",
+            Recurso = "ordem estável das roupas",
+            Motivo = "é a ordem em que ArmorUtility.ApplyArmor absorve o dano, e o empate era decidido por quem vestiu primeiro",
+        },
+        new AlvoDePatch
+        {
             Tipo = typeof(Verse.PawnCollisionTweenerUtility),
             Membro = nameof(Verse.PawnCollisionTweenerUtility.PawnCollisionPosOffsetFor),
             Recurso = "desvio de colisão fora da simulação",
