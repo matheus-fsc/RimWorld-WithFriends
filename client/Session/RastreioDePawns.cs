@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using HarmonyLib;
 using UnityEngine;
+using RimWorld;
 using Verse;
 
 namespace WithFriends.Client.Session;
@@ -310,6 +311,32 @@ public static class RastreioDePawns
             $"precisao {(clima?.CurWeatherAccuracyMultiplier ?? 0f).ToString("R", System.Globalization.CultureInfo.InvariantCulture)}";
     }
 
+    /// <summary>O stat de velocidade, com todos os dígitos: é uma casa decimal
+    /// que acusa, não a terceira.</summary>
+    static string Velocidade(Pawn pawn)
+    {
+        try
+        {
+            return pawn.GetStatValue(StatDefOf.MoveSpeed)
+                .ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+        }
+        catch (Exception) { return "-"; }
+    }
+
+    /// <summary>
+    /// Capacidade de mover. Vem dos hediffs e é <b>cacheada</b> por pawn — e
+    /// cache é onde a interface costuma envenenar sem sortear nada.
+    /// </summary>
+    static string Capacidade(Pawn pawn)
+    {
+        try
+        {
+            return pawn.health?.capacities?.GetLevel(PawnCapacityDefOf.Moving)
+                .ToString("R", System.Globalization.CultureInfo.InvariantCulture) ?? "-";
+        }
+        catch (Exception) { return "-"; }
+    }
+
     static string Linha(Pawn pawn)
     {
         var pather = pawn.pather;
@@ -320,6 +347,22 @@ public static class RastreioDePawns
             $"pos {pawn.Position.x,3},{pawn.Position.z,3}  " +
             $"mov {(pather?.Moving == true ? 1 : 0)} " +
             $"custo {pather?.nextCellCostLeft ?? 0f,8:F3}/{pather?.nextCellCostTotal ?? 0f,8:F3}  " +
+            // **As entradas da velocidade, porque o custo sozinho não acusa a causa.**
+            //
+            // Uma divergência apareceu como custo diferente na terceira casa
+            // decimal, em vários pawns do mesmo tick — nenhuma decisão
+            // diferente, nenhum sorteio a mais. A primeira suspeita foi o
+            // multiplicador de clima (ver LinhaDoMapa), e a instrumentação dele
+            // REFUTOU a hipótese: 400 ticks com a mesma idade de clima e
+            // multiplicador exatamente 1 dos dois lados.
+            //
+            // Refutada a causa global, sobram as de pawn, e `TicksPerMove` é
+            // onde elas se encontram: o stat de velocidade, a capacidade de
+            // mover (que vem dos hediffs e é CACHEADA) e o resultado em ticks.
+            // Sem os três, "o custo diferiu" não distingue stat cacheado de
+            // capacidade recalculada em momento diferente — e são conserto em
+            // lugares opostos.
+            $"vel {Velocidade(pawn)} mover {Capacidade(pawn)} tpm {pawn.TicksPerMoveCardinal,4}  " +
             $"dest {(pather?.Destination.IsValid == true ? $"{pather.Destination.Cell.x},{pather.Destination.Cell.z}" : "-"),-9} " +
             $"job {job?.def?.defName ?? "-",-22} " +
             // **Quando o job começou e quando ele expira.**
