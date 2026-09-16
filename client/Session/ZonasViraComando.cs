@@ -289,22 +289,34 @@ public static class ApagarPlanoViraComando
 /// <para>Rótulo parece enfeite e não é: é por ele que o jogador reconhece a área
 /// no menu de restrição, e a restrição é comando de simulação.</para>
 /// </summary>
-[HarmonyPatch]
-public static class RenomearAreaViraComando
+/// <para><b>Dois remendos e não um, por causa do nome do parâmetro.</b> A
+/// primeira versão apontava os dois métodos de uma classe só, com um prefixo
+/// pedindo <c>string value</c>. O Harmony injeta parâmetro <b>por nome</b>: a
+/// propriedade chama o dela de <c>value</c>, o método chama de <c>newLabel</c>,
+/// e a classe inteira foi recusada —</para>
+///
+/// <code>
+/// RenomearAreaViraComando: Parameter "value" not found in method
+///   System.Void RimWorld.Area_Allowed::SetLabel(System.String newLabel)
+/// </code>
+///
+/// <para>— o que desligou o recurso nos dois caminhos, não só no que tinha o
+/// nome errado. Duas classes custam quatro linhas e não têm como errar isso.</para>
+[HarmonyPatch(typeof(Area_Allowed), nameof(Area_Allowed.RenamableLabel), MethodType.Setter)]
+public static class RenomearAreaPelaPropriedade
 {
-    static System.Collections.Generic.IEnumerable<System.Reflection.MethodBase> TargetMethods()
-    {
-        var setter = AccessTools.PropertySetter(typeof(Area_Allowed),
-            nameof(Area_Allowed.RenamableLabel));
-        if (setter != null) yield return setter;
-
-        var metodo = AccessTools.Method(typeof(Area_Allowed), "SetLabel", new[] { typeof(string) });
-        if (metodo != null) yield return metodo;
-    }
-
     [HarmonyPrefix]
     public static bool Antes(Area_Allowed __instance, string value) =>
         AjustesDeZona.DeixarPassar("renomearArea", __instance.ID, 0, value ?? "");
+}
+
+/// <summary>O outro escritor de <c>labelInt</c>, que não passa pela propriedade.</summary>
+[HarmonyPatch(typeof(Area_Allowed), "SetLabel", new[] { typeof(string) })]
+public static class RenomearAreaPeloMetodo
+{
+    [HarmonyPrefix]
+    public static bool Antes(Area_Allowed __instance, string newLabel) =>
+        AjustesDeZona.DeixarPassar("renomearArea", __instance.ID, 0, newLabel ?? "");
 }
 
 /// <summary>

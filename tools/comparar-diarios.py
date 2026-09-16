@@ -127,6 +127,17 @@ def curto(k, n=6):
 
 
 def main():
+    # **Dois caminhos à mão vencem a escolha automática.**
+    #
+    # Escolher o mais novo é o certo depois de uma corrida da bancada, e o
+    # errado depois de uma partida de gente: quem levou unsync reabre o jogo, o
+    # diário novo é o da sessão SEGUINTE, e a comparação vira "os dois diários
+    # não têm histórico em comum". Aconteceu duas vezes antes de virar isto.
+    if len(sys.argv) >= 3:
+        a, b = sys.argv[1], sys.argv[2]
+        print(f"A  {a}\nB  {b}\n")
+        return comparar(a, b)
+
     a = mais_novo(P1)
 
     # O mais novo entre os candidatos, não o primeiro que existir: numa
@@ -140,7 +151,10 @@ def main():
         return 1
 
     print(f"A  {a}\nB  {b}\n")
+    return comparar(a, b)
 
+
+def comparar(a, b):
     ha, hb = historico(a), historico(b)
     comuns = sorted(set(ha) & set(hb))
     if not comuns:

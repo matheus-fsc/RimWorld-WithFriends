@@ -54,7 +54,8 @@ wf — linha de comando do With Friends
       --controle P                 porta de controle: anfitrião em P, árbitro em P+1
       --semdigital                 não detectar divergência (medir deriva; ADR 0022)
       --sem-compilar               pula o build (quem repete a corrida já compilou)
-  wf comparar                      compara os dois diários mais novos
+      --aquecimento N              o anfitrião joga N ticks sozinho antes de convidar (ADR 0020)
+  wf comparar [A B]                compara dois diários (padrão: os mais novos)
   wf deriva A B                    quanto os dois lados se afastam, tick a tick (ADR 0022)
   wf erros [--todos]               agrupa erros e avisos; destaca os de um lado só
   wf controle [--porta P] [cmd]    dirige um jogo aberto com -controle=P
@@ -222,17 +223,20 @@ cmd_rodar() {
 }
 
 cmd_emular() {
-    local visivel=0 sangue=0 caminho=0 semdigital=0 compilar=1 roteiro="" velocidade="" controle="" args=() pegar_roteiro=0 pegar_vel=0 pegar_ctl=0
+    local visivel=0 sangue=0 caminho=0 semdigital=0 compilar=1 roteiro="" velocidade="" controle="" aquecimento="" args=() pegar_roteiro=0 pegar_vel=0 pegar_ctl=0 pegar_aq=0
     for a in "$@"; do
         if [[ $pegar_roteiro -eq 1 ]]; then roteiro="$a"; pegar_roteiro=0; continue; fi
         if [[ $pegar_vel -eq 1 ]]; then velocidade="$a"; pegar_vel=0; continue; fi
         if [[ $pegar_ctl -eq 1 ]]; then controle="$a"; pegar_ctl=0; continue; fi
+        if [[ $pegar_aq -eq 1 ]]; then aquecimento="$a"; pegar_aq=0; continue; fi
         case "$a" in
             --visivel)   visivel=1 ;;
             --sangue)    sangue=1 ;;
             --caminho)   caminho=1 ;;
             --semdigital) semdigital=1 ;;
             --sem-compilar) compilar=0 ;;
+            --aquecimento)   pegar_aq=1 ;;
+            --aquecimento=*) aquecimento="${a#*=}" ;;
             --roteiro)   pegar_roteiro=1 ;;
             --roteiro=*) roteiro="${a#*=}" ;;
             --velocidade)   pegar_vel=1 ;;
@@ -274,6 +278,9 @@ cmd_emular() {
     [[ -n "$controle" ]] && extra="$extra -controle=$controle"
     # Medição da ADR 0022: a digital fica calada e os dois lados correm livres.
     [[ ${semdigital:-0} -eq 1 ]] && extra="$extra -semdigital"
+    # O anfitrião joga sozinho antes de convidar: é assim que a bancada passa a
+    # ter o estado de processo que só uma partida de gente tinha (ADR 0020).
+    [[ -n "$aquecimento" ]] && extra="$extra -emulacaoaquecimento=$aquecimento"
     if [[ $visivel -eq 1 ]]; then
         semtela=""
         # Unity abre em tela cheia por padrão, e duas instâncias em tela cheia
@@ -295,7 +302,7 @@ cmd_emular() {
     msg "   ao terminar: wf comparar"
 }
 
-cmd_comparar() { exec python3 "$RAIZ/tools/comparar-diarios.py"; }
+cmd_comparar() { exec python3 "$RAIZ/tools/comparar-diarios.py" "$@"; }
 
 cmd_deriva() { exec python3 "$RAIZ/tools/deriva.py" "$@"; }
 

@@ -637,6 +637,23 @@ public sealed class SessaoCliente
         digital.IniciarIntervalo(inicio.TickInicial);
         RngDeSessao.Entrar(inicio.Semente);
 
+        // **O anfitrião também zera os estáticos — e isto faltava.**
+        //
+        // `EstaticosDaSessao` pendura-se em `Game.LoadGame`, e quem carrega é só
+        // o visitante: o anfitrião **continua na partida dele**, que é o que
+        // esta linha de log diz. Resultado: a proteção inteira da ADR 0020 rodou
+        // de um lado só durante todo este tempo — listas embaralhadas,
+        // contadores de id e caches de stat ficavam como o anfitrião os deixou
+        // depois de horas jogando, enquanto o visitante começava do zero.
+        //
+        // O sintoma era sempre o mesmo e nunca apontava para cá: velocidade
+        // diferente na sexta casa decimal, logo nos primeiros ticks, com a
+        // capacidade de mover IDÊNTICA dos dois lados.
+        //
+        // Aqui é o lugar certo: os dois lados estão na mesma partida, e nenhum
+        // tick de sessão andou ainda.
+        EstaticosDaSessao.Zerar("início da visita no anfitrião");
+
         // Os dois lados estão agora na **mesma partida**: comparar faz sentido.
         ProntoParaComparar = true;
         Estado = EstadoSessaoLocal.Simulando;

@@ -576,6 +576,8 @@ def main():
     ap.add_argument("--arbitro", default="presetfull")
     ap.add_argument("--segundos", type=int, default=180)
     ap.add_argument("--porta", type=int, default=25600)
+    ap.add_argument("--aquecimento", type=int, default=0,
+                    help="ticks que o anfitrião joga sozinho antes de convidar (ADR 0020)")
     ap.add_argument("--visivel", action="store_true",
                     help="abre os dois jogos com janela, lado a lado, para acompanhar")
     ap.add_argument("--semente", type=int, default=None,
@@ -616,6 +618,16 @@ def main():
     if args.visivel:
         log("modo visível: duas janelas lado a lado (anfitrião à esquerda)")
 
+    # **A assimetria que a bancada não tinha.**
+    #
+    # Três divergências seguidas de partidas de verdade tinham a mesma causa —
+    # estado de processo do anfitrião, que não vai para o save — e nenhuma delas
+    # a emulação reproduzia, porque aqui os dois lados carregam do zero e entram
+    # na visita em segundos. Com aquecimento o anfitrião joga sozinho primeiro,
+    # como uma pessoa faz, e a bancada passa a medir o jogo que se joga.
+    if args.aquecimento:
+        log(f"aquecimento: o anfitrião joga {args.aquecimento} tick(s) sozinho antes de convidar")
+
     wf = os.path.join(AQUI, "wf")
 
     # **Compilar uma vez, fora das tentativas.**
@@ -635,6 +647,7 @@ def main():
             + ([] if args.cenario == "deriva" else ["--caminho"])
             + (["--semdigital"] if args.cenario == "deriva" else [])
             + (["--visivel"] if args.visivel else [])
+            + (["--aquecimento", str(args.aquecimento)] if args.aquecimento else [])
             + ["--sem-compilar"],
             # A saída do lançador vai para arquivo, não para o vazio: quando a
             # tentativa falha, o motivo costuma estar nas duas linhas que ele
@@ -673,7 +686,10 @@ def main():
         emulacao = lancar()
         log(f"emulação lançada (tentativa {tentativa}); esperando a visita")
 
-        resultado = esperar_visita(args.porta, prazo=300, log=log, processo=emulacao)
+        # O prazo cresce com o aquecimento: enquanto ele corre, o anfitrião fica
+        # "Fora" de propósito, e o prazo de sempre o mataria no meio.
+        prazo = 300 + (args.aquecimento // 4 if args.aquecimento else 0)
+        resultado = esperar_visita(args.porta, prazo=prazo, log=log, processo=emulacao)
         if resultado == "ok":
             break
 

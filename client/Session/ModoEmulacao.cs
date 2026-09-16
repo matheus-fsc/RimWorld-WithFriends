@@ -66,8 +66,37 @@ public static class ModoEmulacao
             ? escolhida
             : TimeSpeed.Fast;
 
+    /// <summary>
+    /// Ticks que o anfitrião joga <b>sozinho</b> antes de chamar o árbitro.
+    ///
+    /// <para><b>Por que isto existe.</b> Três divergências seguidas de partidas
+    /// de verdade tinham a mesma causa e nenhuma delas a bancada conseguia
+    /// reproduzir: <b>estado de processo do anfitrião</b> (ADR 0020) — a fase da
+    /// rotação das torres, os caches de stat, listas embaralhadas no lugar.
+    /// Nada disso vai para o save.</para>
+    ///
+    /// <para>Na emulação os dois lados sobem, carregam o save e entram na visita
+    /// em segundos. Nascem com o estado de processo igual, e por isso a bancada
+    /// dava "nenhuma divergência" para bugs que derrubavam a sessão de gente no
+    /// primeiro minuto. O arnês media um jogo que ninguém joga.</para>
+    ///
+    /// <para>Com aquecimento, o anfitrião joga sozinho por uns milhares de ticks
+    /// antes de convidar — exatamente o que uma pessoa faz. Os caches enchem, as
+    /// torres param em qualquer ângulo, os contadores andam. Aí o árbitro chega
+    /// do zero, como o visitante de verdade, e a assimetria que a partida real
+    /// tem passa a existir também aqui.</para>
+    ///
+    /// <para>Zero por padrão: uma corrida sem aquecimento continua sendo a mais
+    /// rápida, e é a que se quer quando a pergunta é outra.</para>
+    /// </summary>
+    static int Aquecimento =>
+        GenCommandLine.TryGetCommandLineArg("emulacaoaquecimento", out string a) &&
+        int.TryParse(a, out int v) ? v : 0;
+
     static float acabaEm = -1f;
     static bool comecou;
+    static int aquecerAte = -1;
+    static bool aquecido;
 
     /// <summary>
     /// Chamado a cada quadro. Toca a emulação do começo ao fim.
@@ -80,6 +109,35 @@ public static class ModoEmulacao
         if (!Ativo || Current.Game == null) return;
 
         var sessao = Colony.SincronizacaoComponent.Atual?.Sessao;
+
+        // 0. Aquecer: jogar sozinho antes de convidar, para acumular o estado de
+        //    processo que uma pessoa acumula. Só o anfitrião faz isto — o
+        //    árbitro roda sem `-emulacao` e nem chega aqui, que é justamente a
+        //    assimetria que se quer.
+        if (!aquecido && Aquecimento > 0 && sessao is { Estado: EstadoSessaoLocal.Fora })
+        {
+            if (aquecerAte < 0)
+            {
+                aquecerAte = Find.TickManager.TicksGame + Aquecimento;
+                Log.Message(
+                    $"[WithFriends/emulação] aquecendo: {Aquecimento} tick(s) sozinho antes de convidar " +
+                    $"(até o tick {aquecerAte}).");
+            }
+
+            if (Find.TickManager.TicksGame < aquecerAte)
+            {
+                // Sem isto o jogo fica parado no tick em que carregou e o
+                // aquecimento nunca termina.
+                if (Find.TickManager.Paused || Find.TickManager.CurTimeSpeed != Velocidade)
+                    ControleDeVelocidade.ComoSistema(
+                        () => Find.TickManager.CurTimeSpeed = Velocidade);
+                return;
+            }
+
+            aquecido = true;
+            Log.Message(
+                $"[WithFriends/emulação] aquecido no tick {Find.TickManager.TicksGame} — chamando o árbitro.");
+        }
 
         // 1. Chamar o árbitro. `Lancar` já espera ele aparecer e convida.
         if (!comecou && WithFriendsMod.Cliente.Conectado && sessao is { Estado: EstadoSessaoLocal.Fora })
