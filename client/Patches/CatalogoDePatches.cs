@@ -64,6 +64,13 @@ public static class CatalogoDePatches
         },
         new AlvoDePatch
         {
+            Tipo = typeof(Verse.SkyManager),
+            Membro = nameof(Verse.SkyManager.ForceSetCurSkyGlow),
+            Recurso = "céu do tick, não do quadro",
+            Motivo = "o brilho do céu entra na velocidade de todo pawn por StatPart_Glow, e quem o atualiza é Map.MapUpdate — quadro, não tick",
+        },
+        new AlvoDePatch
+        {
             Tipo = typeof(RimWorld.PreceptComp_UnwillingToDo_Chance),
             Membro = nameof(RimWorld.PreceptComp_UnwillingToDo_Chance.MemberWillingToDo),
             Recurso = "vontade de ideologia semeada",
