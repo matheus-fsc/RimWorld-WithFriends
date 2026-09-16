@@ -30,10 +30,24 @@ namespace WithFriends.Client.Session;
 /// que sabe o que cada chave quer dizer. Acrescentar a próxima decisão de zona
 /// custa uma entrada, sem tocar no protocolo.</para>
 ///
-/// <para><b>Quem pode.</b> Só o anfitrião — zona e área são a arrumação da casa,
-/// e a visita acontece na colônia dele (§4). O visitante continua restringindo
-/// os próprios pawns às áreas que existem, que é <c>AjusteDePawn</c> e segue
-/// liberado; o que ele não faz é apagar a área que o dono desenhou.</para>
+/// <para><b>Quem pode: os dois — e isso foi decidido pelo avesso.</b> A primeira
+/// versão pôs esta família na lista de só-anfitrião, no argumento de que zona e
+/// área são a arrumação da casa. Um teste à mão derrubou o argumento em um
+/// minuto: o visitante apagou a zona, o coordenador recusou, o apagar local
+/// tinha sido bloqueado, e a zona simplesmente ficou lá. Da cadeira dele, o jogo
+/// desfez o que ele acabou de fazer.</para>
+///
+/// <para>E o log mostrou por que a regra era indefensível: no mesmo minuto, o
+/// visitante <b>encolheu a zona célula a célula e a expandiu em 117 células</b>
+/// — os designadores de zona nunca foram restritos. Podia desfazer a zona
+/// inteira pela borda, não podia apagá-la pelo botão. Mesma superfície, mesmo
+/// gesto, regras opostas.</para>
+///
+/// <para>O §4 fala de decisões que admitem <b>uma resposta só</b> — missões,
+/// aceitar ou recusar um evento, provocar um acontecimento. Zona não é diálogo;
+/// é trabalho de colônia, e o visitante está ali justamente para ajudar (§5).
+/// Duas pessoas mexendo em zona é como duas pessoas construindo, que já
+/// valia.</para>
 /// </summary>
 public static class AjustesDeZona
 {

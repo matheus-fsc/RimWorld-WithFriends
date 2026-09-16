@@ -553,11 +553,18 @@ public class SessaoTests
         // precisa poder erguer uma barricada durante um raid. Ver
         // docs/COMANDOS-DE-SESSAO.md — se alguém mover Designar para
         // só-anfitrião por parecer mais coerente, este teste avisa.
+        //
+        // `Zona` está aqui pelo mesmo motivo, e aprendido do jeito caro: ela
+        // nasceu em só-anfitrião e durou uma tarde. Os designadores de zona
+        // nunca foram restritos, então o visitante já encolhia e expandia zona à
+        // vontade — e só o botão de apagar era proibido. Restringir metade de uma
+        // superfície não protege nada; só faz o clique não responder.
         var inicio = AbrirSessao();
 
         foreach (var tipo in new[] { TipoDeComando.Alistar, TipoDeComando.OrdemDeTrabalho,
                                      TipoDeComando.Designar, TipoDeComando.Velocidade,
-                                     TipoDeComando.OrdemPriorizada, TipoDeComando.Alternar })
+                                     TipoDeComando.OrdemPriorizada, TipoDeComando.Alternar,
+                                     TipoDeComando.Zona })
         {
             var comando = new SessaoComando
             {
@@ -806,22 +813,27 @@ public class SessaoTests
     };
 
     [Fact]
-    public void O_incidente_e_a_zona_sao_decisao_da_colonia()
+    public void So_o_incidente_e_decisao_da_colonia()
     {
         // A lista de só-anfitrião é curta de propósito, e cresce só por decisão
         // (§4). Este teste existe para que **acrescentar** alguém a ela seja um
         // ato consciente: um tipo novo nasce valendo para os dois, e quem quiser
         // restringi-lo tem de vir mudar isto aqui.
         //
-        // `Zona` entrou por decisão, em 16/09/2026: zona e área são a arrumação
-        // da casa, e a visita acontece na colônia do anfitrião. O visitante
-        // continua restringindo os próprios pawns às áreas que existem — isso é
-        // `AjusteDePawn` e segue valendo para os dois; o que ele não faz é apagar
-        // a área que o dono desenhou.
-        var soDoAnfitriao = new[] { TipoDeComando.Incidente, TipoDeComando.Zona };
-
+        // `Zona` entrou aqui em 16/09/2026 e saiu no mesmo dia, derrubada por um
+        // teste à mão: o visitante apagou uma zona, o coordenador recusou, o
+        // apagar local já tinha sido bloqueado, e a zona ficou — o jogo desfez o
+        // que ele acabou de fazer, sem explicar.
+        //
+        // O que fechou o argumento foi o log: no mesmo minuto, o visitante
+        // encolheu a zona célula a célula e a expandiu em 117 células, porque os
+        // designadores de zona nunca foram restritos. Podia desfazer a zona pela
+        // borda e não pelo botão.
+        //
+        // O §4 é sobre decisões que admitem uma resposta só. Zona é trabalho de
+        // colônia, e o visitante está ali para ajudar.
         foreach (TipoDeComando tipo in Enum.GetValues(typeof(TipoDeComando)))
-            Assert.Equal(soDoAnfitriao.Contains(tipo),
+            Assert.Equal(tipo == TipoDeComando.Incidente,
                 AutoridadeDeComando.SoDoAnfitriao((byte)tipo));
     }
 

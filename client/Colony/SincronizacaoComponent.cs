@@ -285,6 +285,26 @@ public class SincronizacaoComponent : GameComponent
     {
         Log.Warning($"[WithFriends] erro do coordenador ({erro.Codigo}): {erro.Explicacao}");
 
+        // **Recusar um comando não é derrubar ninguém.**
+        //
+        // O protocolo já dizia isto em `SemAutoridade` — "a sessão segue
+        // normalmente, só este comando não acontece" —, e o cliente não cumpria
+        // o próprio contrato: todo erro que não fosse planeta virava carta de
+        // "conexão encerrada" e `Desconectar()`.
+        //
+        // O custo apareceu num teste à mão: o visitante clicou em apagar uma
+        // zona, o coordenador recusou por autoridade, e a VISITA INTEIRA
+        // terminou — do lado do anfitrião, "ParticipanteDesconectou". Um botão
+        // proibido encerrava a partida de duas pessoas.
+        //
+        // Recusa é conversa normal entre cliente e coordenador. Vira mensagem na
+        // tela, que é onde o jogador olha quando o clique dele não faz nada.
+        if (erro.Codigo == CodigoErro.SemAutoridade)
+        {
+            Messages.Message(erro.Explicacao, MessageTypeDefOf.RejectInput, historical: false);
+            return;
+        }
+
         // Planeta diferente não derruba e nem é falha: o jogador continua
         // conectado, guardando checkpoint e jogando. É informação — ele só não
         // divide mapa-mundo com quem está em outro planeta (§11).

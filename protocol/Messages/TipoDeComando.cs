@@ -192,7 +192,7 @@ public static class AutoridadeDeComando
 {
     /// <summary>Este tipo é decisão da colônia, e portanto só do anfitrião?</summary>
     public static bool SoDoAnfitriao(byte tipo) =>
-        (TipoDeComando)tipo is TipoDeComando.Incidente or TipoDeComando.Zona;
+        (TipoDeComando)tipo == TipoDeComando.Incidente;
 
     /// <summary>
     /// Lê o tipo de um payload. <c>0</c> para payload vazio — que nenhum

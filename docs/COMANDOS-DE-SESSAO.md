@@ -396,6 +396,27 @@ recusado nunca chega a existir para lado nenhum. E a recusa volta explicada, com
 `CodigoErro.SemAutoridade`: silêncio numa recusa é pior que a recusa, porque o
 jogador clica, nada acontece, e ele não sabe se travou ou se não podia.
 
+**E recusa não derruba ninguém.** Isso estava escrito no protocolo desde sempre —
+"a sessão segue normalmente, só este comando não acontece" — e o cliente não
+cumpria: todo erro que não fosse planeta virava carta de "conexão encerrada" mais
+`Desconectar()`. Um teste à mão mostrou o preço em 16/09/2026: o visitante clicou
+em apagar uma zona, o coordenador recusou por autoridade, e a **visita inteira
+terminou** — do lado do anfitrião, `ParticipanteDesconectou`. Um botão proibido
+encerrava a partida de duas pessoas. Agora a recusa vira mensagem na tela, que é
+onde o jogador olha quando o clique não faz nada.
+
+### O que a lista de só-anfitrião não deve conter
+
+Uma superfície pela metade. `Zona` entrou nessa lista e durou uma tarde: os
+designadores de zona nunca foram restritos, então o visitante já encolhia uma
+zona célula a célula e a expandia em 117 de uma vez — só o botão de apagar era
+proibido. Restringir metade de um gesto não protege decisão nenhuma; só faz o
+clique não responder.
+
+O §4 fala de decisões que admitem **uma resposta só**: missões, aceitar ou
+recusar um evento, provocar um acontecimento. Zona é trabalho de colônia, e o
+visitante está ali para ajudar.
+
 ## Incidente como comando
 
 Nasceu de um impedimento de teste. As ferramentas de debug estão bloqueadas na
