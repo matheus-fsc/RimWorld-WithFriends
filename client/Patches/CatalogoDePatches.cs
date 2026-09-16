@@ -291,6 +291,13 @@ public static class CatalogoDePatches
         },
         new AlvoDePatch
         {
+            Tipo = typeof(RimWorld.StatWorker),
+            Membro = nameof(RimWorld.StatWorker.GetValue),
+            Recurso = "cache de stat fora da interface",
+            Motivo = "a interface grava no cache temporário de stats e a simulação lê de lá — velocidade diferente sem sortear nada",
+        },
+        new AlvoDePatch
+        {
             Tipo = typeof(RimWorld.HealthCardUtility),
             Membro = nameof(RimWorld.HealthCardUtility.CreateSurgeryBill),
             Recurso = "marcar operação dentro de sessão",
