@@ -93,6 +93,33 @@ public static class EfeitosNaoDeterministicos
             if (m != null) yield return m;
         }
 
+        // **A rotação da torre.**
+        //
+        // `TurretTop.TurretTopTick` sorteia duas coisas: quanto esperar até a
+        // próxima virada ociosa e para que lado virar. É desenho — `CurRotation`
+        // só é lida por `DrawTurret` —, mas sorteia do fluxo compartilhado.
+        //
+        // E o estado dela **não está no save**: `TurretTop` não tem
+        // `ExposeData`, então `ticksUntilIdleTurn` e `idleTurnClockwise` são
+        // estado de processo (ADR 0020). O anfitrião chega à visita com as
+        // torres dele em qualquer fase da animação; o visitante carrega o save e
+        // começa do zero. Daí em diante cada lado sorteia a virada ociosa num
+        // tick diferente, e o fluxo compartilhado se desencontra — sem nenhuma
+        // decisão de jogador, sem nada de errado na simulação.
+        //
+        // Como apareceu: numa partida com muitas torres, divergência em combate
+        // com `TurretTop.TurretTopTick` sorteando 5 vezes de um lado e 4 do
+        // outro no mesmo tick.
+        //
+        // Isolar em vez de zerar o estado: mesmo com as duas fases iguais no
+        // começo, animação não tem por que pesar no fluxo da simulação. Zerar
+        // dependeria de os dois lados recarregarem, e isolar não depende de
+        // nada.
+        {
+            var m = AccessTools.Method(AccessTools.TypeByName("RimWorld.TurretTop"), "TurretTopTick");
+            if (m != null) yield return m;
+        }
+
         // Som: sustainers escolhem amostras sorteando.
         foreach (var tipo in new[] { typeof(SubSustainer), typeof(SoundStarter) })
         foreach (var m in tipo.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
