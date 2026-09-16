@@ -337,6 +337,36 @@ public static class RastreioDePawns
         catch (Exception) { return "-"; }
     }
 
+    /// <summary>A posição de desenho — a que vira origem de tiro.</summary>
+    static string Desenho(Pawn pawn)
+    {
+        try
+        {
+            var p = pawn.Drawer?.DrawPos ?? default;
+            return $"{p.x,8:F3},{p.z,8:F3}";
+        }
+        catch (Exception) { return "       -,       -"; }
+    }
+
+    /// <summary>
+    /// O tranco visual (<c>JitterHandler</c>): o único termo do
+    /// <c>DrawPos</c> que ainda não tem guarda dentro do tick.
+    /// </summary>
+    static readonly System.Reflection.FieldInfo? CampoDoTranco =
+        AccessTools.Field(typeof(Pawn_DrawTracker), "jitterer");
+
+    static string Tranco(Pawn pawn)
+    {
+        try
+        {
+            if (pawn.Drawer == null || CampoDoTranco?.GetValue(pawn.Drawer) is not JitterHandler j)
+                return "     -,     -";
+            var o = j.CurrentOffset;
+            return $"{o.x,6:F3},{o.z,6:F3}";
+        }
+        catch (Exception) { return "     -,     -"; }
+    }
+
     static string Linha(Pawn pawn)
     {
         var pather = pawn.pather;
@@ -363,6 +393,21 @@ public static class RastreioDePawns
             // capacidade recalculada em momento diferente — e são conserto em
             // lugares opostos.
             $"vel {Velocidade(pawn)} mover {Capacidade(pawn)} tpm {pawn.TicksPerMoveCardinal,4}  " +
+            // **A posição de DESENHO, e o tranco visual dentro dela.**
+            //
+            // `Verb_LaunchProjectile.TryCastShot` usa `caster.DrawPos` como
+            // origem do projétil — desenho virando balística. Já saíram dali
+            // três causas de divergência (o tween, a inclinação, o desvio de
+            // colisão), e a quarta apareceu com o atirador PARADO e byte a byte
+            // idêntico nos dois lados:
+            //
+            //   A: origem 104.35, 89.41     B: origem 104.50, 89.50
+            //
+            // Parado, a raiz é o centro da célula — que é o que B tem. O desvio
+            // de A vem de algum termo que `Pawn_DrawTracker.DrawPos` soma depois
+            // do tween, e adivinhar qual já custou duas hipóteses hoje. Estes
+            // dois números dizem na próxima corrida.
+            $"desenho {Desenho(pawn)} tranco {Tranco(pawn)}  " +
             $"dest {(pather?.Destination.IsValid == true ? $"{pather.Destination.Cell.x},{pather.Destination.Cell.z}" : "-"),-9} " +
             $"job {job?.def?.defName ?? "-",-22} " +
             // **Quando o job começou e quando ele expira.**
