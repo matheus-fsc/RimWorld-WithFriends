@@ -122,6 +122,35 @@ public static class EstaticosDaSessao
         Campo(typeof(CellFinder), "mapEdgeCells", null);
         Campo(typeof(CellFinder), "mapSingleEdgeCells", new List<IntVec3>[4]);
 
+        // **Os caches de stat, que não estão no save e mudam a velocidade.**
+        //
+        // `StatWorker` guarda o valor de cada stat por coisa, carimbado com o
+        // tick (`temporaryStatCache`). O worker vive na base de defs, ou seja,
+        // dura o processo inteiro — e nada disso vai para o save.
+        //
+        // O anfitrião chega à visita com esses caches cheios do que ele jogou
+        // antes; o visitante carrega o save e começa vazio. Enquanto uma entrada
+        // velha não envelhece, um lado lê o valor guardado e o outro calcula o
+        // atual — e a simulação anda com velocidades diferentes sem ter sorteado
+        // nada.
+        //
+        // Medido: logo no tick 14 de uma visita, com a capacidade de mover
+        // IDÊNTICA dos dois lados e o stat diferente na sexta casa:
+        //
+        //   A: Huber  vel 4.33074331  mover 1.02  tpm 13.96581
+        //   B: Huber  vel 4.331489    mover 1.02  tpm 13.96341
+        //
+        // O guarda de <c>CacheDeStatForaDaInterface</c> impede a interface de
+        // ENVENENAR daqui para a frente; este zera o que já estava envenenado
+        // antes de a visita começar. São as duas metades do mesmo problema.
+        int statsLimpos = 0;
+        foreach (var stat in DefDatabase<StatDef>.AllDefsListForReading)
+        {
+            try { stat.Worker?.TryClearCache(); statsLimpos++; }
+            catch (Exception) { /* stat sem worker: não guarda nada */ }
+        }
+        if (statsLimpos > 0) feitos++;
+
         // Contadores de id. Não sorteiam, mas entram em comparação e ordenação —
         // e id diferente para a mesma sala vira decisão diferente mais adiante.
         Campo(typeof(Room), "nextRoomID", 1);
