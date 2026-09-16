@@ -49,6 +49,28 @@ public static class AlternaveisDeSessao
             if (dono.TryGetComp<CompForbiddable>() is { } comp)
                 ComoSistema(() => comp.Forbidden = valor);
         },
+
+        // Cama médica. Decide quem deita ali quando cai ferido — e numa visita
+        // cai gente das duas colônias.
+        ["camaMedica"] = (dono, valor) =>
+        {
+            if (dono is Building_Bed cama) ComoSistema(() => cama.Medical = valor);
+        },
+
+        // Ponto de encontro (fogueira, mesa): liga e desliga o lugar para onde
+        // os colonos vão descansar em grupo.
+        ["pontoDeEncontro"] = (dono, valor) =>
+        {
+            if (dono.TryGetComp<CompGatherSpot>() is { } comp)
+                ComoSistema(() => comp.Active = valor);
+        },
+
+        // "Não cortar esta planta": tira o trabalho da lista de quem colhe.
+        ["naoCortar"] = (dono, valor) =>
+        {
+            if (dono.TryGetComp<CompPlantPreventCutting>() is { } comp)
+                ComoSistema(() => comp.PreventCutting = valor);
+        },
     };
 
     /// <summary>
@@ -153,4 +175,41 @@ public static class ProibirViraComando
     [HarmonyPrefix]
     public static bool Antes(CompForbiddable __instance, bool value) =>
         AlternaveisDeSessao.DeixarPassar(__instance.parent, "proibido", value);
+}
+
+/// <summary>
+/// Cama médica. Decide quem deita ali quando cai ferido — e numa visita cai
+/// gente das duas colônias, o que faz desta uma chave de combate.
+/// </summary>
+[HarmonyPatch(typeof(Building_Bed), nameof(Building_Bed.Medical), MethodType.Setter)]
+public static class CamaMedicaViraComando
+{
+    [HarmonyPrefix]
+    public static bool Antes(Building_Bed __instance, bool value) =>
+        AlternaveisDeSessao.DeixarPassar(__instance, "camaMedica", value);
+}
+
+/// <summary>
+/// Ponto de encontro: liga e desliga o lugar para onde os colonos vão descansar
+/// em grupo, e portanto para onde eles andam nas folgas.
+/// </summary>
+[HarmonyPatch(typeof(CompGatherSpot), nameof(CompGatherSpot.Active), MethodType.Setter)]
+public static class PontoDeEncontroViraComando
+{
+    [HarmonyPrefix]
+    public static bool Antes(CompGatherSpot __instance, bool value) =>
+        AlternaveisDeSessao.DeixarPassar(__instance.parent, "pontoDeEncontro", value);
+}
+
+/// <summary>
+/// "Não cortar esta planta": tira o trabalho da lista de quem colhe, no tick
+/// seguinte, dos dois lados.
+/// </summary>
+[HarmonyPatch(typeof(CompPlantPreventCutting),
+    nameof(CompPlantPreventCutting.PreventCutting), MethodType.Setter)]
+public static class NaoCortarViraComando
+{
+    [HarmonyPrefix]
+    public static bool Antes(CompPlantPreventCutting __instance, bool value) =>
+        AlternaveisDeSessao.DeixarPassar(__instance.parent, "naoCortar", value);
 }

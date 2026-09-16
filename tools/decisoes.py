@@ -25,12 +25,14 @@ Uso
 
 import os
 import re
+import subprocess
 import sys
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 MP = os.path.join(AQUI, "..", "referencia", "repos", "Multiplayer",
                   "Source", "Client", "Syncing", "Game")
 CLIENTE = os.path.join(AQUI, "..", "client")
+RAIZ = os.path.dirname(AQUI)
 
 # O que já vira comando aqui, LIDO DO CÓDIGO.
 #
@@ -122,65 +124,57 @@ def alvos_do_mp():
     return fora
 
 
-DECOMPILADO = os.environ.get(
-    "WF_DECOMPILADO",
-    "/tmp/claude-1000/-home-math-Dev-RimWorld-WithFriends/"
-    "bb748b79-8b07-47b2-8c8e-e2d6323fc3c2/scratchpad/dec/Assembly-CSharp.decompiled.cs")
+JOGO = os.environ.get(
+    "WF_JOGO", os.path.expanduser("~/.local/share/Steam/steamapps/common/RimWorld"))
+ASSEMBLY = os.path.join(JOGO, "RimWorldLinux_Data", "Managed", "Assembly-CSharp.dll")
+AUDITOR = os.path.join(RAIZ, "tools", "Auditor", "bin", "Debug", "WithFriends.Auditor.dll")
 
 
 def formas(alvos):
     """
-    A forma de cada membro no jogo: bool, propriedade simples, ou método.
+    A forma de cada membro no jogo: bool, valor, closure ou método.
 
     É o que separa "herdável de graça" de "trabalho de verdade". Um `bool` cabe
-    no registro de `Alternar` com uma linha; uma propriedade simples cabe no de
-    `AjusteDePawn`; um método precisa de intercepção própria — e se for
-    `GetGizmos`, precisa identificar o closure, que é o caso mais caro e a razão
-    de o Multiplayer ter 227 registros de lambda.
+    no registro de `Alternar` com uma linha; um valor simples cabe no de
+    `AjusteDePawn` ou no de `AjustesDeZona`; um método precisa de intercepção
+    própria — e se ele DEVOLVE botões, a decisão não está nele, está na lambda
+    que o botão executa. É o caso caro, e a razão de o Multiplayer ter 227
+    registros de lambda.
 
-    Precisa do assembly decompilado (WF_DECOMPILADO ou o padrão):
-
-        ilspycmd -o /tmp/dec referencia/jogo/steam-*/Managed/Assembly-CSharp.dll
+    **De onde vem a resposta.** Do metadado do assembly, pelo `--formas` do
+    auditor. A primeira versão lia um assembly DECOMPILADO com expressão
+    regular: dependia do `ilspycmd` instalado, de 200 MB de C# gerado e de a
+    formatação do decompilador não mudar — e ainda assim confundia um método com
+    outro de mesmo nome em classe vizinha. O metadado responde a mesma pergunta
+    sem nada disso.
     """
-    try:
-        src = open(DECOMPILADO, encoding="utf8", errors="replace").read()
-    except OSError:
+    if not os.path.exists(ASSEMBLY):
         return None
 
-    classes = {}
-    for m in re.finditer(
-            r"^\t(?:public |internal |sealed |abstract |static |partial )*class (\w+)", src, re.M):
-        classes.setdefault(m.group(1), m.start())
+    if not os.path.exists(AUDITOR):
+        r = subprocess.run(["dotnet", "build", os.path.join(RAIZ, "tools/Auditor/Auditor.csproj"),
+                            "-v", "q", "--nologo"], capture_output=True)
+        if r.returncode != 0 or not os.path.exists(AUDITOR):
+            return None
 
-    fora = {}
-    for alvo in alvos:
-        tipo, _, membro = alvo.partition(".")
-        pos = classes.get(tipo)
-        if pos is None:
-            fora[alvo] = "?"
-            continue
+    saida = subprocess.run(["dotnet", AUDITOR, ASSEMBLY, "--formas"],
+                           capture_output=True, text=True)
+    if saida.returncode != 0:
+        return None
 
-        trecho = src[pos:pos + 120000]
-        esc = re.escape(membro)
+    # Um membro pode aparecer mais de uma vez (sobrecargas, herança achatada). A
+    # forma mais informativa ganha: quem tem um `bool` por trás é chave, mesmo
+    # que exista um método de mesmo nome.
+    # A forma mais remendável ganha: propriedade tem setter, campo não tem onde
+    # remendar, e um método de mesmo nome não muda isso.
+    peso = {"bool": 4, "valor": 3, "campo": 2, "closure": 1, "método": 0}
+    tabela = {}
+    for linha in saida.stdout.splitlines():
+        nome, _, forma = linha.partition("\t")
+        if forma and peso.get(forma, -1) > peso.get(tabela.get(nome, ""), -1):
+            tabela[nome] = forma
 
-        p1 = re.search(rf"\n\t\t(?:public |protected |internal )(?:virtual |override |static )?"
-                       rf"([\w<>\[\]\.\?]+) {esc}\s*(?:\n\t\t\{{|=> )", trecho)
-        c1 = re.search(rf"\n\t\t(?:public |protected |internal )(?:static |readonly )*"
-                       rf"([\w<>\[\]\.\?]+) {esc}\s*[;=]", trecho)
-        tipo_membro = (p1 or c1).group(1) if (p1 or c1) else None
-
-        if tipo_membro == "bool":
-            fora[alvo] = "bool"
-        elif tipo_membro:
-            fora[alvo] = "valor"
-        elif membro in ("GetGizmos", "GetMultiSelectFloatMenuOptions", "CompFloatMenuOptions",
-                        "ExtraFloatMenuOptions", "CompGetGizmosExtra",
-                        "GetFloatMenuOptionsForPawn", "Inspect"):
-            fora[alvo] = "closure"
-        else:
-            fora[alvo] = "método"
-
-    return fora
+    return {alvo: tabela.get(alvo, "?") for alvo in alvos}
 
 
 def fora_de_escopo(alvo):
@@ -258,19 +252,20 @@ def main():
                 contagem.setdefault(f[alvo], []).append(alvo)
 
             legenda = {
-                "bool":    "uma linha no registro de Alternar",
-                "valor":   "uma linha no registro de AjusteDePawn",
+                "bool":    "propriedade bool: uma linha no registro de Alternar",
+                "valor":   "propriedade: uma linha no registro de AjusteDePawn ou AjustesDeZona",
+                "campo":   "campo público: não há setter para remendar — a decisão está na lambda do botão",
                 "closure": "botão cuja ação é lambda — o caso caro (MP: 227 registros)",
                 "método":  "intercepção própria, uma a uma",
                 "?":       "tipo não encontrado no assembly",
             }
             print("\n== por forma do membro — o que é herdável de graça\n")
-            for chave in ("bool", "valor", "método", "closure", "?"):
+            for chave in ("bool", "valor", "campo", "método", "closure", "?"):
                 itens = contagem.get(chave, [])
                 if itens:
                     print(f"  {chave:<9} {len(itens):>3}   {legenda[chave]}")
             if todos:
-                for chave in ("bool", "valor"):
+                for chave in ("bool", "valor", "campo"):
                     print(f"\n  -- {chave}")
                     for alvo in contagem.get(chave, []):
                         print(f"     {alvo}")

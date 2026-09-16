@@ -289,6 +289,29 @@ public static class CatalogoDePatches
             Recurso = "apagar plano dentro de sessão",
             Motivo = "o desenho que orienta o que construir depois",
         },
+        // As chaves que o mapa de decisões dava como herdáveis "de graça" — e
+        // que, depois de separar propriedade de campo, são só estas três.
+        new AlvoDePatch
+        {
+            Tipo = typeof(RimWorld.Building_Bed),
+            Membro = nameof(RimWorld.Building_Bed.Medical),
+            Recurso = "cama médica dentro de sessão",
+            Motivo = "decide quem deita ali quando cai ferido, e numa visita cai gente das duas colônias",
+        },
+        new AlvoDePatch
+        {
+            Tipo = typeof(RimWorld.CompGatherSpot),
+            Membro = nameof(RimWorld.CompGatherSpot.Active),
+            Recurso = "ponto de encontro dentro de sessão",
+            Motivo = "decide para onde os colonos andam nas folgas",
+        },
+        new AlvoDePatch
+        {
+            Tipo = typeof(RimWorld.CompPlantPreventCutting),
+            Membro = nameof(RimWorld.CompPlantPreventCutting.PreventCutting),
+            Recurso = "não cortar esta planta dentro de sessão",
+            Motivo = "tira o trabalho da lista de quem colhe, no tick seguinte",
+        },
         new AlvoDePatch
         {
             Tipo = typeof(RimWorld.Zone_Growing),

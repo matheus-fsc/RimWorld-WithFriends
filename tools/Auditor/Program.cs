@@ -32,6 +32,55 @@ using var assembly = AssemblyDefinition.ReadAssembly(dll, leitura);
 
 var tipos = TodosOsTipos(assembly.MainModule).ToList();
 
+// **A forma de cada membro, direto do metadado.**
+//
+// `wf decisoes --forma` precisa separar "herdável de graça" de "trabalho de
+// verdade": um `bool` cabe numa linha do registro de `Alternar`, uma propriedade
+// simples numa de `AjusteDePawn`, e um método precisa de intercepção própria.
+//
+// A primeira versão disso lia um assembly DECOMPILADO com expressão regular, e
+// portanto dependia do `ilspycmd` instalado, de 200 MB de C# gerado e de a
+// formatação do decompilador não mudar. O metadado responde a mesma pergunta
+// sem nada disso, e responde certo: aqui não há "achei um método com o mesmo
+// nome noutra classe".
+if (args.Contains("--formas"))
+{
+    foreach (var tipo in tipos)
+    {
+        // **Campo e propriedade não são a mesma notícia.**
+        //
+        // Os dois guardam um `bool`, mas só a propriedade tem setter — e setter
+        // é onde se remenda. Campo público é escrito direto, quase sempre de
+        // dentro da lambda de um botão, e aí não há fonte: é o caso caro.
+        //
+        // A ADR 0022 contou "31 herdáveis de graça (11 bool + 20 valor)" porque
+        // a classificação antiga não fazia esta distinção. Dos 29 que sobraram
+        // depois da família zona/área, cinco são propriedade. O resto é campo.
+        foreach (var campo in tipo.Fields.Where(f => f.IsPublic && !f.IsStatic))
+            Console.WriteLine($"{tipo.Name}.{campo.Name}\tcampo");
+
+        foreach (var prop in tipo.Properties.Where(p => p.SetMethod?.IsPublic == true))
+            Console.WriteLine($"{tipo.Name}.{prop.Name}\t{Forma(prop.PropertyType)}");
+
+        foreach (var m in tipo.Methods.Where(m => m.IsPublic && !m.IsConstructor &&
+                                                  !m.IsGetter && !m.IsSetter))
+            Console.WriteLine($"{tipo.Name}.{m.Name}\t{(ProduzBotao(m.Name) ? "closure" : "método")}");
+    }
+
+    return 0;
+}
+
+// Um membro que o jogador altera: `bool` vira chave, o resto vira valor.
+static string Forma(TypeReference t) => t.FullName == "System.Boolean" ? "bool" : "valor";
+
+// Métodos que DEVOLVEM botões: a decisão não está neles, está na lambda que o
+// botão executa. É o caso caro — e a razão de o Multiplayer ter 227 registros
+// de lambda.
+static bool ProduzBotao(string nome) =>
+    nome is "GetGizmos" or "GetMultiSelectFloatMenuOptions" or "CompFloatMenuOptions"
+        or "ExtraFloatMenuOptions" or "CompGetGizmosExtra" or "GetFloatMenuOptionsForPawn"
+        or "Inspect";
+
 // Quem a simulação de uma visita alcança, pelo IL. A separação por nome ordena
 // a leitura; esta corta a lista.
 var alcance = new WithFriends.Auditor.Alcance(assembly.MainModule, tipos);

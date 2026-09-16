@@ -208,9 +208,19 @@ Independente do rumo, não se perde:
 
 - o payload do `Job` inteiro via `Scribe` — necessário para atribuir job de fora
   tanto quanto para transmitir ordem sob lockstep;
-- a família **pawn** de comandos (feita) e os 31 herdáveis de graça (11 bool +
-  20 valor) — sob lockstep são "o que precisa virar comando", sob decisão
+- a família **pawn** de comandos (feita), a **zona/área** (feita) e os herdáveis
+  de graça — sob lockstep são "o que precisa virar comando", sob decisão
   autoritativa são "o que o anfitrião decide";
+
+  > **Correção de 16/09/2026: eram 6, não 31.** A conta de "31 herdáveis de graça
+  > (11 bool + 20 valor)" saiu de um classificador que não separava **campo** de
+  > **propriedade**. Os dois guardam um `bool`, mas só a propriedade tem setter —
+  > e setter é onde se remenda. Campo público é escrito direto, quase sempre de
+  > dentro da lambda de um botão, e aí não há fonte: é o caso caro, o mesmo dos
+  > 227 registros de lambda do Multiplayer. Depois de separar os dois: 3
+  > propriedades `bool`, 3 de valor, e 23 campos que não são de graça nenhuma.
+  > O classificador agora lê o metadado do assembly em vez de um decompilado
+  > (`wf decisoes --forma`), e responde certo.
 - toda a bancada: `wf rodar`, a porta de controle, `wf dirigir`, os rastreios e
   os comparadores. Eles medem simulação, não desenho de rede.
 
