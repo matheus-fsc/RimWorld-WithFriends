@@ -213,9 +213,36 @@ def cenario_deriva(c, log):
         log(f"não consegui injetar no árbitro: {e}")
         return
 
-    # Daqui em diante, nada. Os dois correm e os diários guardam o estado por
-    # tick; a deriva se lê depois, comparando posições dos pawns em comum.
-    log("divergência injetada — deixando correr")
+    # **Despejar de propósito, porque nada mais vai despejar.**
+    #
+    # O rastreio de pawns guarda os últimos ticks em memória e só escreve no
+    # diário quando a digital acusa divergência. Com `--semdigital` a digital
+    # está calada — é essa a condição da medida —, então, sem pedir, os dois
+    # lados correm a visita inteira e não gravam uma linha de posição. A
+    # primeira versão deste cenário fez exatamente isso: injetou, esperou, e não
+    # deixou nada para medir.
+    #
+    # Então o despejo vira relógio: a cada 20s os dois lados gravam a janela que
+    # têm. Pedir aos DOIS no mesmo instante é o que faz as janelas se
+    # sobreporem nos mesmos passos, que é o que a comparação precisa.
+    log("divergência injetada — despejando dos dois lados a cada 20s")
+
+    segundos = int(os.environ.get("WF_SEGUNDOS", "300"))
+    fim = time.time() + max(0, segundos - 30)
+    rodada = 0
+    while time.time() < fim:
+        time.sleep(20)
+        rodada += 1
+        try:
+            with Controle(porta_arbitro) as arb:
+                c.cmd("despejar")
+                arb.cmd("despejar")
+                passo_a = c.estado().get("passo")
+                passo_b = arb.estado().get("passo")
+            log(f"despejo {rodada}: anfitrião no passo {passo_a}, árbitro no {passo_b}")
+        except (OSError, RuntimeError) as e:
+            log(f"despejo {rodada} falhou: {e}")
+            return
 
 
 CENARIOS = {
@@ -415,7 +442,19 @@ def esperar_visita(porta, prazo, log, processo=None):
             if guerra_de_identidade():
                 return "duplicada"
 
-            sem_jogo = sem_jogo + 1 if not jogos_vivos() else 0
+            # **Enquanto o lançador corre, ausência de jogo não é morte.**
+            #
+            # `wf emular` fecha o que estiver aberto, sobe o coordenador e semeia
+            # a pasta do árbitro antes de lançar qualquer coisa — uns dez
+            # segundos em que não existe processo de jogo e é certo que não
+            # exista. Contar isso como morte abortava a tentativa aos seis
+            # segundos e matava, na limpeza seguinte, o lançador que ainda estava
+            # trabalhando. Doze tentativas assim, e nenhuma chegou a lançar o
+            # jogo.
+            if processo is not None and processo.poll() is None:
+                sem_jogo = 0
+            else:
+                sem_jogo = sem_jogo + 1 if not jogos_vivos() else 0
             if sem_jogo >= 3:
                 return "sumiu"
 
@@ -457,6 +496,7 @@ def main():
 
     log(f"semente {semente} — repita com --semente {semente}")
     os.environ["WF_PORTA_ARBITRO"] = str(args.porta + 1)
+    os.environ["WF_SEGUNDOS"] = str(args.segundos)
 
     if args.cenario == "deriva":
         log("modo medição: digital calada, divergência injetada de um lado só")

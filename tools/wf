@@ -55,6 +55,7 @@ wf — linha de comando do With Friends
       --semdigital                 não detectar divergência (medir deriva; ADR 0022)
       --sem-compilar               pula o build (quem repete a corrida já compilou)
   wf comparar                      compara os dois diários mais novos
+  wf deriva A B                    quanto os dois lados se afastam, tick a tick (ADR 0022)
   wf erros [--todos]               agrupa erros e avisos; destaca os de um lado só
   wf controle [--porta P] [cmd]    dirige um jogo aberto com -controle=P
   wf dirigir CENARIO               visita inteira com gestos de interface, e compara
@@ -294,6 +295,8 @@ cmd_emular() {
 
 cmd_comparar() { exec python3 "$RAIZ/tools/comparar-diarios.py"; }
 
+cmd_deriva() { exec python3 "$RAIZ/tools/deriva.py" "$@"; }
+
 cmd_erros() { exec python3 "$RAIZ/tools/erros.py" "$@"; }
 
 cmd_controle() { exec python3 "$RAIZ/tools/controle.py" "$@"; }
@@ -347,6 +350,7 @@ case "${1:-}" in
     rodar)    shift; cmd_rodar "$@" ;;
     emular)   shift; cmd_emular "$@" ;;
     comparar) shift; cmd_comparar "$@" ;;
+    deriva)   shift; cmd_deriva "$@" ;;
     erros)    shift; cmd_erros "$@" ;;
     controle) shift; cmd_controle "$@" ;;
     dirigir)  shift; cmd_dirigir "$@" ;;

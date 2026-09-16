@@ -1,6 +1,6 @@
 # ADR 0022 — Decisão autoritativa do anfitrião, em vez de determinismo estrito
 
-**Status:** proposto — decisão de rumo, não tomada
+**Status:** proposto, com escopo reduzido pela medição de 16/09/2026
 **Data:** 2026-09-15
 **Origem:** "se a simulação já tiver algumas heurísticas de confiança, como
 posição, saúde, dano recebido, itens, não há problema em divergir a simulação em
@@ -136,11 +136,71 @@ O resultado importa pouquíssimo. O **acoplamento** é que é fatal, e ele exist
 porque o `Rand` é um fluxo único. Sob decisão autoritativa esse caso desaparece
 sem ninguém precisar consertá-lo — é o argumento inteiro, num caso real.
 
-## Critério de decisão
+## Critério de decisão — medido em 16/09/2026
 
-Não decidir agora. O que decide é a medição que falta: **a deriva a partir de
-uma divergência grande**. Se ela couber numa correção a 1 Hz, a proposta fecha.
-Se explodir, o custo de correção sobe e a conta precisa ser refeita.
+A medição que faltava foi feita: `wf dirigir deriva`, dois lados sob a mesma
+barreira, digital calada (`--semdigital`, para que a divergência não seja
+detectada nem desfeita), e um assalto de 2000 pontos injetado **só no árbitro**
+no passo 25. Depois disso, ninguém toca em nada por cinco minutos; os dois lados
+despejam o estado dos pawns a cada 20s e `tools/deriva.py` compara a posição dos
+pawns COMUNS aos dois lados, tick a tick.
+
+**Controle, primeiro.** A mesma corrida sem injeção: 380 ticks, 122 pawns,
+**0 diferentes, distância zero**. O instrumento mede o que diz medir.
+
+**Com a divergência injetada:**
+
+```
+   tick  comuns  só A  só B  difer.      %   média    máx
+    766     154     0     1     143  92.9%    6.37   16.6
+   2183     154     0     1     151  98.1%    8.21   27.2
+   4690     154     0     1     153  99.4%   10.05   46.2
+   7247     154     0     1     153  99.4%   10.20   47.4
+   9065     154     0     1     151  98.1%   37.16   98.2
+  11397     125    13    14     125 100.0%   36.82  161.6
+  14512     115    16    17     115 100.0%   28.78  119.4
+```
+
+Três coisas, e a terceira é a que decide.
+
+**A deriva não é gradual: ela é imediata.** No primeiro tick medido — 766
+passos, uns treze segundos de jogo depois da injeção — **93% dos pawns já estão
+em posição diferente**, com média de 6,4 células. Não há janela em que poucos
+divirjam e o resto acompanhe. O `Rand` é um fluxo único: uma decisão a mais de um
+lado desloca todos os sorteios seguintes, e todo pawn que sorteia qualquer coisa
+sai do lugar. A hipótese de "diverge em aspectos" não sobrevive ao primeiro
+segundo.
+
+**A distância, essa sim, é modesta e estável.** Média de 6 células que vira 10 e
+fica em 10 por dois minutos inteiros (ticks 4000–7000). Não explode; oscila. Só
+depois do tick 9000 pula para 37 — e cai de novo para 29 no fim. Corrigir posição
+a 1 Hz é barato em bytes: 150 pawns × (id + x + z) ≈ 1,8 KB/s, oito vezes menos
+que os 14 KB/s já medidos para a decisão autoritativa.
+
+**O que não cabe em correção é o conjunto, não a posição.** Os pawns comuns caem
+de 154 para 115 ao longo da corrida: ao fim, 16 existem só de um lado e 17 só do
+outro. Isso não é afastamento, é divergência estrutural — pawns morrem de um lado
+e não do outro, e nenhuma correção de posição conserta um pawn que não existe. É
+aqui que a conta de "corrigir o que diverge" deixa de ser sobre largura de banda.
+
+### A decisão
+
+A proposta **não fecha na forma em que foi escrita**, e não é por causa da
+largura de banda — essa passa folgada. É porque a premissa "divergir em aspectos"
+não descreve o que acontece: com um `Rand` único, uma divergência grande vira,
+em treze segundos, uma divergência em tudo.
+
+O que sobrevive da proposta é a parte autoritativa sobre **existência e saúde**,
+não sobre posição: quem vive, quem morre, quanto dano levou. Essas são poucas,
+raras e caras de errar — exatamente o perfil que justifica autoridade. Posição de
+bala e passo de pawn podem divergir porque são baratas de corrigir; mas só
+divergem barato enquanto o conjunto de pawns for o mesmo dos dois lados.
+
+Fica **proposto**, com o escopo reduzido: autoridade sobre existência e saúde,
+lockstep para o resto. A medição a fazer agora é outra: quanto tempo leva, sob
+lockstep com comandos cobrindo as famílias que faltam, para o conjunto de pawns
+divergir sozinho — se nunca divergir, a autoridade sobre existência é seguro, não
+arquitetura.
 
 ## O que vale nos dois caminhos
 
