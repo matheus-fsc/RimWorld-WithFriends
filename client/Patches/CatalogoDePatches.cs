@@ -62,6 +62,13 @@ public static class CatalogoDePatches
             Motivo = "projétil sobrescreve o getter e decide por InViewOf: a bala andava " +
                      "de 1 em 1 tick para quem olhava e de 15 em 15 para o outro",
         },
+        new AlvoDePatch
+        {
+            Tipo = typeof(RimWorld.PreceptComp_UnwillingToDo_Chance),
+            Membro = nameof(RimWorld.PreceptComp_UnwillingToDo_Chance.MemberWillingToDo),
+            Recurso = "vontade de ideologia semeada",
+            Motivo = "sorteia a cada pergunta, e quem pergunta é o menu do botão direito — um clique movia o fluxo de um lado só",
+        },
         // As lacunas do determinismo do Multiplayer, portadas de uma vez.
         new AlvoDePatch
         {

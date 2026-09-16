@@ -80,6 +80,21 @@ public static class EfeitosNaoDeterministicos
             if (ctor != null) yield return ctor;
         }
 
+        // **Refazer os gráficos de um pawn sorteia.**
+        //
+        // `SetAllGraphicsDirty` regenera o desenho do pawn e sorteia no caminho
+        // (variações de cabelo, de tatuagem, de peça). É chamada quando a
+        // aparência muda — e a interface muda aparência: vestir pela janela de
+        // roupas, trocar estilo, abrir a tela de personagem.
+        //
+        // O Multiplayer semeia esta por (pawn, semente do mundo); aqui basta
+        // isolar, porque o resultado é desenho e desenho pode diferir entre as
+        // duas telas. O que não pode é mover o fluxo da sessão.
+        {
+            var m = AccessTools.Method(typeof(PawnRenderer), nameof(PawnRenderer.SetAllGraphicsDirty));
+            if (m != null) yield return m;
+        }
+
         // Cabelo/estilo sorteado e malha de raio: da lista do Multiplayer.
         foreach (var (tipoNome, membro) in new[]
                  {
