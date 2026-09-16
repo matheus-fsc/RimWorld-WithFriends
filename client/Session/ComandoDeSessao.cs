@@ -174,6 +174,16 @@ public static class ComandoDeSessao
             if (campoCor != null && cor != null) campoCor.SetValue(designador, cor);
         }
 
+        // A área escolhida: sem ela o designador de área recusa tudo do lado
+        // que não clicou. Ver EscreverDesignador.
+        int areaId = r.ReadInt32();
+        if (areaId >= 0)
+        {
+            var campoArea = AccessTools.Field(designador.GetType(), "selectedArea");
+            var area = Find.CurrentMap?.areaManager?.AllAreas?.FirstOrDefault(a => a.ID == areaId);
+            if (campoArea != null && area != null) campoArea.SetValue(designador, area);
+        }
+
         return (designador, godMode, "");
     }
 
@@ -279,7 +289,27 @@ public static class ComandoDeSessao
         // então o comando toma um caminho diferente em cada máquina.
         var campoCor = AccessTools.Field(designador.GetType(), "colorDef");
         w.Write(campoCor?.GetValue(designador) is Def cor ? cor.defName : "");
+
+        // **Qual área está sendo pintada é estado da interface.**
+        //
+        // `Designator_AreaAllowed` guarda a área escolhida num campo que o
+        // jogador preenche ao selecioná-la na tela. Do outro lado ninguém
+        // selecionou nada, e o jogo recusa cada célula:
+        //
+        //   anfitrião:  Designator_AreaAllowedExpand em 24/24 célula(s)
+        //   visitante:  Designator_AreaAllowedExpand em  0/24 — 24 recusada(s)
+        //
+        // A área do visitante ficava vazia. O animal restrito a ela estava
+        // "fora da área permitida" num lado e não no outro, escolhia `Goto` de
+        // um lado e `GotoWander` do outro, e a visita acabava ali. É a mesma
+        // razão de a cor do planejador viajar logo acima — escolha de jogador
+        // que mora no designador, não no mapa.
+        w.Write(AreaDoDesignador(designador)?.ID ?? -1);
     }
+
+    /// <summary>A área que o designador de área está pintando, se for um.</summary>
+    static Area? AreaDoDesignador(Designator designador) =>
+        AccessTools.Field(designador.GetType(), "selectedArea")?.GetValue(designador) as Area;
 
     /// <summary>
     /// Provocar um incidente no mapa da visita.
