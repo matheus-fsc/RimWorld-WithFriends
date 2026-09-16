@@ -51,7 +51,50 @@ public static class RetratoDaPartida
             $"danoLigado {DebugSettings.enableDamage}, " +
             $"surtosLigados {DebugSettings.enableRandomMentalStates}, " +
             $"doencasLigadas {DebugSettings.enableRandomDiseases}, " +
-            $"semAnimais {DebugSettings.noAnimals}";
+            $"semAnimais {DebugSettings.noAnimals}\n" +
+            $"  ordem das listas de célula: {OrdemDasCelulas(mapa)}";
+    }
+
+    /// <summary>
+    /// Uma digital da ORDEM em que as coisas estão listadas em cada célula.
+    ///
+    /// <para><b>Por que isto merece uma linha no retrato.</b> A ordem da lista
+    /// de uma célula é a ordem em que as coisas entraram nela — história de
+    /// processo, não estado do save (ADR 0020). E ela decide simulação: quando
+    /// uma bala atravessa uma célula, <c>Projectile.CheckForFreeIntercept</c>
+    /// percorre essa lista e sorteia por candidato, <b>parando no primeiro
+    /// acerto</b>. Duas ordens diferentes, dois alvos diferentes.</para>
+    ///
+    /// <para>O anfitrião não recarrega na junção — ele continua na partida dele
+    /// —, então as listas dele carregam tudo o que aconteceu antes da visita. O
+    /// visitante monta as dele carregando o save, na ordem do arquivo. Se esta
+    /// digital diferir entre os dois lados no início da visita, está provado; se
+    /// bater, a suspeita cai e é preciso procurar noutro lugar.</para>
+    ///
+    /// <para>Só células com mais de uma coisa entram: onde há uma só não há
+    /// ordem, e elas são a maioria esmagadora do mapa.</para>
+    /// </summary>
+    static string OrdemDasCelulas(Map? mapa)
+    {
+        if (mapa?.thingGrid == null) return "-";
+
+        int celulas = 0;
+        ulong digital = 1469598103934665603UL;   // FNV-1a, 64 bits
+
+        foreach (var celula in mapa.AllCells)
+        {
+            var lista = mapa.thingGrid.ThingsListAtFast(celula);
+            if (lista == null || lista.Count < 2) continue;
+
+            celulas++;
+            foreach (var coisa in lista)
+            {
+                digital ^= (ulong)coisa.thingIDNumber;
+                digital *= 1099511628211UL;
+            }
+        }
+
+        return $"{digital:x16} ({celulas} célula(s) com mais de uma coisa)";
     }
 
     public static void Registrar(string momento) => Log.Message(Tirar(momento));
