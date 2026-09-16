@@ -289,6 +289,13 @@ public static class CatalogoDePatches
             Recurso = "apagar plano dentro de sessão",
             Motivo = "o desenho que orienta o que construir depois",
         },
+        new AlvoDePatch
+        {
+            Tipo = typeof(RimWorld.HealthCardUtility),
+            Membro = nameof(RimWorld.HealthCardUtility.CreateSurgeryBill),
+            Recurso = "marcar operação dentro de sessão",
+            Motivo = "a conta de cirurgia muda, no tick seguinte, o que o médico faz e o que o paciente faz",
+        },
         // Os pontos de vigilância de campo (CamposObservados). Alvos privados:
         // o catálogo guarda o nome em texto porque `nameof` não alcança o que
         // não é público — e é justamente por isso que verificar a existência na

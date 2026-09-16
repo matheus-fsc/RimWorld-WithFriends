@@ -188,6 +188,27 @@ public enum TipoDeComando : byte
     /// fonte para remendar, e aquilo é outro problema.</para>
     /// </summary>
     AjusteDeCoisa = 13,
+
+    /// <summary>
+    /// Marcar uma operação: anestesiar, amputar, instalar um implante.
+    ///
+    /// <para>Apareceu num teste à mão em que todo o resto passou — de todos os
+    /// gestos de interface, só a operação divergiu. E faz sentido: a conta de
+    /// cirurgia entra na pilha de trabalhos e muda, no tick seguinte, o que o
+    /// médico faz e o que o paciente faz.</para>
+    ///
+    /// <para>Viaja a <b>escolha</b> (receita, parte do corpo, ingredientes), não
+    /// a conta. Um <c>Bill_Medical</c> tem receita, parte, ingredientes
+    /// reservados, suspensão e um id de carga; serializar tudo seria um
+    /// documento por clique, e ainda deixaria o id nascendo de um lado só. Com a
+    /// escolha, os dois lados criam a conta com o mesmo código do jogo, no mesmo
+    /// passo, e o id sai do contador do save.</para>
+    ///
+    /// <para>A parte do corpo vai por <b>índice</b>, não por nome: um corpo tem
+    /// dois braços e dez dedos com o mesmo def, e "o primeiro que casa" operaria
+    /// o braço esquerdo de um lado e o direito do outro.</para>
+    /// </summary>
+    Cirurgia = 14,
 }
 
 /// <summary>

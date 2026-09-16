@@ -399,6 +399,21 @@ public static class ComandoDeSessao
                     r.ReadInt32(), r.ReadString(), r.ReadInt32(), r.ReadString());
             }
 
+            case TipoDeComando.Cirurgia:
+            {
+                using var ms = new MemoryStream(payload, writable: false);
+                using var r = new BinaryReader(ms);
+                r.ReadByte();
+
+                int pawnId = r.ReadInt32();
+                string receita = r.ReadString();
+                int parte = r.ReadInt32();
+                var ingredientes = new int[r.ReadInt32()];
+                for (int i = 0; i < ingredientes.Length; i++) ingredientes[i] = r.ReadInt32();
+
+                return Cirurgia.Aplicar(pawnId, receita, parte, ingredientes);
+            }
+
             case TipoDeComando.AjusteDeCoisa:
             {
                 using var ms = new MemoryStream(payload, writable: false);
