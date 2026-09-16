@@ -62,6 +62,28 @@ public static class CatalogoDePatches
             Motivo = "projétil sobrescreve o getter e decide por InViewOf: a bala andava " +
                      "de 1 em 1 tick para quem olhava e de 15 em 15 para o outro",
         },
+        // As lacunas do determinismo do Multiplayer, portadas de uma vez.
+        new AlvoDePatch
+        {
+            Tipo = typeof(Verse.PriorityWork),
+            Membro = nameof(Verse.PriorityWork.Clear),
+            Recurso = "trabalho prioritário só no tick",
+            Motivo = "é chamada de dentro da interface e apaga o alvo do trabalho priorizado do pawn",
+        },
+        new AlvoDePatch
+        {
+            Tipo = typeof(RimWorld.SituationalThoughtHandler),
+            Membro = nameof(RimWorld.SituationalThoughtHandler.Notify_SituationalThoughtsDirty),
+            Recurso = "sujeira de pensamento só no tick",
+            Motivo = "esvaziar o cache pela interface força o recálculo num momento que só existe de um lado",
+        },
+        new AlvoDePatch
+        {
+            Tipo = typeof(RimWorld.SituationalThoughtHandler),
+            Membro = nameof(RimWorld.SituationalThoughtHandler.AppendSocialThoughts),
+            Recurso = "consulta de pensamento não carimba",
+            Motivo = "o carimbo decide quando o cache expira, e uma tela aberta adiava a expiração de um lado só",
+        },
         new AlvoDePatch
         {
             Tipo = typeof(RimWorld.Pawn_ApparelTracker),
